@@ -148,6 +148,31 @@ export const saveFile = async (req, res) => {
   }
 };
 
+export const saveFileHomepage = async (req, res) => {
+  try {
+    const { key, mediaType, variantType } = req.body;
+    
+
+    const { data, error } = await supabase
+      .from("Homepagefiles")
+      .insert([
+        {
+          storage_key: key,
+          media_type: mediaType,
+          variant_type: variantType,
+        },
+      ])
+      .select();
+
+    if (error) throw error;
+
+    res.json(data[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to save file" });
+  }
+};
+
 export const CreateClient = async(req,res) => {
   try {
     const { name,email,date,location,role,password,eventName } = req.body;
@@ -257,6 +282,65 @@ export async function GetClientImages(req,res){
   }
 
 }
+
+
+export async function GetHomepageImages(req,res){
+  
+//  try {
+//     const { data, error } = await supabase
+//       .from("Homepagefiles")
+//       .select("*")
+      
+
+//     if (error) throw error;
+
+//     res.json(data);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Failed to Fetch files" });
+//   }
+
+
+  
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const variantType = req.query.variant_type;
+
+  console.log(variantType)
+
+
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from('Homepagefiles')
+    .select('*', { count: 'exact' });
+
+  // 🔴 Apply filter ONLY if it exists
+  if (variantType && variantType !== 'All') {
+    query = query.eq('variant_type', variantType);
+  }
+
+  // Always apply order + range at the end
+  const { data, count, error } = await query
+    .range(from, to);
+
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({
+    data,
+    total: count,
+    page,
+    totalPages: Math.ceil(count / limit)
+  });
+
+}
+
+
 export async function GetClientData(req,res){
   const {clientId} = req.body
  try {
