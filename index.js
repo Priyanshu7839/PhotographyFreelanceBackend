@@ -16,7 +16,7 @@ const corsOptions = {
     'http://localhost:5174',
     'http://localhost:3000',
     'https://photographyfreelance.vercel.app',
-    'https://midorimediacompany.com/'
+    'https://midorimediacompany.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
