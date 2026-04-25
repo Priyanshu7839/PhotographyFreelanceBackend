@@ -46,7 +46,7 @@ export async function SendEnquiry(req, res) {
     // ✅ Email content
     const mailOptions = {
       from: `"${name}" <${process.env.EMAIL_SENDER}>`,
-      to: "midoriclicks@gmail.com", // your receiving email
+      to: "midorimediacompany@gmail.com", // your receiving email
       subject: `📸 New Photography Enquiry from ${name}`,
       html: `
         <h2>New Photography Enquiry</h2>
