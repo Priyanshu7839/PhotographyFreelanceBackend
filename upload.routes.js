@@ -2,6 +2,7 @@ import express from 'express'
 const router = express.Router();
 
 import { getUploadUrl,saveFile,startMultipartUpload,getMultipartUploadUrl,completeMultipartUpload,abortMultipartUpload, CreateClient, GetClients, GetSize, getPreviewKey, GetClientImages, GetClientData, SelectImage, saveFileHomepage, GetHomepageImages } from "./upload.controller.js";
+import { SendEnquiry } from './nodemailer.js';
 
 
 
@@ -21,6 +22,8 @@ router.post("/getclientimages",GetClientImages)
 router.post("/getClientData",GetClientData)
 router.post("/selectImage",SelectImage)
 router.get("/homepageimages",GetHomepageImages)
+
+router.post("/sendenquiry",SendEnquiry)
 
 
 

@@ -2,6 +2,9 @@ import express from 'express'
 import UploadRouter from './upload.routes.js';
 import tests from './test.js';
 import cors from 'cors'
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 
 
