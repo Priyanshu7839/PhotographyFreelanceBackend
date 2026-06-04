@@ -3,6 +3,13 @@ import UploadRouter from './upload.routes.js';
 import tests from './test.js';
 import cors from 'cors'
 import dotenv from 'dotenv';
+import cookieParser from "cookie-parser";
+
+
+import clientRouter from './routes/Client.routes.js';
+import loginRouter from './login.routes.js';
+import projectRouter from './routes/ProjectDetails.routes.js';
+import homepageRouter from './routes/Homepage.routes.js'
 
 dotenv.config();
 
@@ -23,6 +30,8 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+
+app.use(cookieParser());
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
@@ -30,6 +39,10 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = 8002;
 
 app.use('/upload',UploadRouter)
+app.use('/client',clientRouter)
+app.use('/auth',loginRouter)
+app.use('/project',projectRouter)
+app.use('/homepage',homepageRouter)
 
 tests.testR2()
 tests.testSupabase()

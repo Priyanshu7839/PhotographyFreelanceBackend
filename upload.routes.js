@@ -3,12 +3,13 @@ const router = express.Router();
 
 import { getUploadUrl,saveFile,startMultipartUpload,getMultipartUploadUrl,completeMultipartUpload,abortMultipartUpload, CreateClient, GetClients, GetSize, getPreviewKey, GetClientImages, GetClientData, SelectImage, saveFileHomepage, GetHomepageImages } from "./upload.controller.js";
 import { SendEnquiry } from './nodemailer.js';
+import { userAuth } from './middleware/auth.js';
 
 
 
 router.post("/admin/upload-url", getUploadUrl);
 router.post("/savetoDb",saveFile)
-router.post("/savetoDbhomepage",saveFileHomepage)
+router.post("/savetoDbhomepage",userAuth,saveFileHomepage)
 router.post("/multipart/start", startMultipartUpload);
 router.post("/multipart/sign-part", getMultipartUploadUrl);
 router.post("/multipart/complete", completeMultipartUpload);
