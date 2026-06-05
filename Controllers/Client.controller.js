@@ -31,8 +31,7 @@ export const createClient = async (req, res) => {
       });
     }
 
-    const OFFICE_ADDRESS =
-      process.env.OFFICE_ADDRESS;
+    const OFFICE_ADDRESS = ''
     const freeMiles = 20;
     let drivingDistance = 0;
     let travelFee = 0;
