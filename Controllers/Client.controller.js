@@ -31,7 +31,7 @@ export const createClient = async (req, res) => {
       });
     }
 
-    const OFFICE_ADDRESS = ''
+    const OFFICE_ADDRESS = 'New york'
     const freeMiles = 20;
     let drivingDistance = 0;
     let travelFee = 0;
@@ -46,8 +46,7 @@ export const createClient = async (req, res) => {
               destination: eventLocation,
             },
             headers: {
-              "x-rapidapi-key":
-                process.env.RAPID_API_KEY,
+              "x-rapidapi-key":'d3cfd720b6msh644a12c2e9f2d08p186288jsn9c9392aa203b',
               "x-rapidapi-host":
                 "driving-distance-calculator-between-two-points.p.rapidapi.com",
               "Content-Type":
