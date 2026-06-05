@@ -12,7 +12,7 @@ export const createClient = async (req, res) => {
       clientName,
       eventType,
       eventDate,
-      eventLocation,
+      selectedLocation,
       workflow_template_id,
       workflowSteps,
       teamAssignments,
@@ -22,7 +22,7 @@ export const createClient = async (req, res) => {
       !clientName ||
       !eventType ||
       !eventDate ||
-      !eventLocation ||
+      !selectedLocation ||
       !workflowSteps?.length
     ) {
       return res.status(400).json({
@@ -43,7 +43,7 @@ export const createClient = async (req, res) => {
           {
             params: {
               origin: OFFICE_ADDRESS,
-              destination: eventLocation,
+              destination: selectedLocation,
             },
             headers: {
               "x-rapidapi-key":'d3cfd720b6msh644a12c2e9f2d08p186288jsn9c9392aa203b',
@@ -95,7 +95,7 @@ export const createClient = async (req, res) => {
           event_date: eventDate,
 
           event_location:
-            eventLocation,
+            selectedLocation,
 
           email: `${clientName
             .trim()
