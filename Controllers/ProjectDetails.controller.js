@@ -346,7 +346,32 @@ export const getClientOverview = async (
   res
 ) => {
   try {
-    const { clientId } = req.params;
+    const { clientId } =
+      req.params;
+
+    // =========================
+    // CLIENT DETAILS
+    // =========================
+
+    const {
+      data: client,
+      error: clientError,
+    } = await supabase
+      .from("clients")
+      .select(`
+        client_name,
+        email,
+        password
+      `)
+      .eq(
+        "client_id",
+        clientId
+      )
+      .single();
+
+    if (clientError) {
+      throw clientError;
+    }
 
     // =========================
     // PROJECT STEPS
@@ -358,10 +383,16 @@ export const getClientOverview = async (
     } = await supabase
       .from("project_steps")
       .select("*")
-      .eq("client_id", clientId)
-      .order("step_order", {
-        ascending: true,
-      });
+      .eq(
+        "client_id",
+        clientId
+      )
+      .order(
+        "step_order",
+        {
+          ascending: true,
+        }
+      );
 
     if (stepsError) {
       throw stepsError;
@@ -380,7 +411,8 @@ export const getClientOverview = async (
       projectSteps[0] ||
       null;
 
-    let assignedMember = null;
+    let assignedMember =
+      null;
 
     if (
       currentStep?.assigned_member_id
@@ -390,7 +422,9 @@ export const getClientOverview = async (
         error: memberError,
       } = await supabase
         .from("members")
-        .select("full_name")
+        .select(
+          "full_name"
+        )
         .eq(
           "member_id",
           currentStep.assigned_member_id
@@ -415,10 +449,16 @@ export const getClientOverview = async (
     } = await supabase
       .from("activity_logs")
       .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", {
-        ascending: false,
-      })
+      .eq(
+        "client_id",
+        clientId
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        }
+      )
       .limit(10);
 
     if (activityError) {
@@ -427,8 +467,12 @@ export const getClientOverview = async (
 
     const recentActivities =
       await Promise.all(
-        (activities || []).map(
-          async (activity) => {
+        (
+          activities || []
+        ).map(
+          async (
+            activity
+          ) => {
             let memberName =
               "System";
 
@@ -438,7 +482,9 @@ export const getClientOverview = async (
               const {
                 data: member,
               } = await supabase
-                .from("members")
+                .from(
+                  "members"
+                )
                 .select(
                   "full_name"
                 )
@@ -480,7 +526,10 @@ export const getClientOverview = async (
         count: "exact",
         head: true,
       })
-      .eq("client_id", clientId);
+      .eq(
+        "client_id",
+        clientId
+      );
 
     if (assetsError) {
       throw assetsError;
@@ -498,8 +547,13 @@ export const getClientOverview = async (
       error: moodboardError,
     } = await supabase
       .from("moodboards")
-      .select("moodboard_id")
-      .eq("client_id", clientId)
+      .select(
+        "moodboard_id"
+      )
+      .eq(
+        "client_id",
+        clientId
+      )
       .single();
 
     if (
@@ -515,7 +569,8 @@ export const getClientOverview = async (
           "moodboard_discussions"
         )
         .select("*", {
-          count: "exact",
+          count:
+            "exact",
           head: true,
         })
         .eq(
@@ -523,7 +578,9 @@ export const getClientOverview = async (
           moodboard.moodboard_id
         );
 
-      if (discussionError) {
+      if (
+        discussionError
+      ) {
         throw discussionError;
       }
 
@@ -549,9 +606,10 @@ export const getClientOverview = async (
       totalSteps === 0
         ? 0
         : Math.round(
-            (completedSteps /
-              totalSteps) *
-              100
+            (
+              completedSteps /
+              totalSteps
+            ) * 100
           );
 
     const uniqueMembers =
@@ -569,7 +627,19 @@ export const getClientOverview = async (
 
     return res.status(200).json({
       success: true,
+
       data: {
+        client_details: {
+          client_name:
+            client.client_name,
+
+          email:
+            client.email,
+
+          password:
+            client.password,
+        },
+
         current_step:
           currentStep
             ? {
