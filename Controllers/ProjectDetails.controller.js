@@ -2385,3 +2385,80 @@ export const addMoodboardDiscussion =
       });
     }
   };
+
+
+
+
+
+export const downloadFile =
+  async (req, res) => {
+    try {
+      const { fileId } =
+        req.params;
+
+      const {
+        data: file,
+        error,
+      } = await supabase
+        .from("files")
+        .select(`
+          file_name,
+          object_storage_key
+        `)
+        .eq(
+          "file_id",
+          fileId
+        )
+        .single();
+
+      if (
+        error ||
+        !file
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "File not found",
+        });
+      }
+
+      const command =
+        new GetObjectCommand({
+          Bucket:
+            process.env
+              .R2_BUCKET,
+
+          Key:
+            file.object_storage_key,
+
+          ResponseContentDisposition:
+            `attachment; filename="${file.file_name}"`,
+        });
+
+      const downloadUrl =
+        await getSignedUrl(
+          r2,
+          command,
+          {
+            expiresIn: 300,
+          }
+        );
+
+      return res.status(200).json({
+        success: true,
+        download_url:
+          downloadUrl,
+      });
+    } catch (error) {
+      console.error(
+        "Download Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
