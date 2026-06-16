@@ -1,7 +1,7 @@
 import express from "express";
 
 import { teamOnly, userAuth } from "../middleware/auth.js";
-import { addMoodboardDiscussion, addMoodboardSong, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadFile, getAllGears, getClientHeader, getClientNotes, getClientOverview, getClientWorkflow, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
+import { addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadFile, getAllGears, getClientHeader, getClientNotes, getClientOverview, getClientWorkflow, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
 
 const projectRouter = express.Router();
 projectRouter.get(
@@ -126,6 +126,13 @@ projectRouter.get(
   "/download/:fileId",
   userAuth,
   downloadFile
+);
+
+projectRouter.post(
+  "/:clientId/addsteps",
+  userAuth,
+teamOnly,
+  addProjectStep
 );
 
 export default projectRouter;

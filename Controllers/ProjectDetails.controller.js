@@ -414,14 +414,25 @@ export const getClientOverview = async (
     // CURRENT STEP
     // =========================
 
-    let currentStep =
-      projectSteps.find(
-        (step) =>
-          step.step_status ===
-          "in_progress"
-      ) ||
-      projectSteps[0] ||
-      null;
+   const currentStep =
+  projectSteps.find(
+    (step) =>
+      step.step_status ===
+      "in_progress"
+  ) ||
+  projectSteps.find(
+    (step) =>
+      step.step_status ===
+      "pending"
+  ) ||
+  projectSteps[
+    projectSteps.length - 1
+  ] ||
+  null;
+
+  
+
+  
 
       
 
@@ -2543,6 +2554,154 @@ export const downloadFile =
         success: false,
         message:
           error.message,
+      });
+    }
+  };
+
+  export const addProjectStep =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const {
+        step_name,
+        assigned_member_id,
+        step_order,
+      } = req.body;
+
+      if (
+        !step_name ||
+        !step_order
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "step_name and step_order are required",
+        });
+      }
+
+      // Get existing steps
+      const {
+        data: existingSteps,
+        error: fetchError,
+      } = await supabase
+        .from("project_steps")
+        .select(`
+          project_step_id,
+          step_order
+        `)
+        .eq(
+          "client_id",
+          clientId
+        )
+        .order(
+          "step_order",
+          {
+            ascending: true,
+          }
+        );
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const finalOrder =
+        Math.min(
+          Number(step_order),
+          existingSteps.length +
+            1
+        );
+
+      // Shift all affected steps
+      const stepsToShift =
+        existingSteps.filter(
+          (step) =>
+            step.step_order >=
+            finalOrder
+        );
+
+      for (const step of stepsToShift) {
+        const {
+          error:
+            updateError,
+        } = await supabase
+          .from(
+            "project_steps"
+          )
+          .update({
+            step_order:
+              step.step_order +
+              1,
+          })
+          .eq(
+            "project_step_id",
+            step.project_step_id
+          );
+
+        if (
+          updateError
+        ) {
+          throw updateError;
+        }
+      }
+
+      // Insert new step
+      const {
+        data: newStep,
+        error:
+          insertError,
+      } = await supabase
+        .from(
+          "project_steps"
+        )
+        .insert([
+          {
+            client_id:
+              clientId,
+
+            workflow_step_id:
+              null,
+
+            assigned_member_id:
+              assigned_member_id ||
+              null,
+
+            step_name,
+
+            step_order:
+              finalOrder,
+
+            step_status:
+              "pending",
+          },
+        ])
+        .select()
+        .single();
+
+      if (
+        insertError
+      ) {
+        throw insertError;
+      }
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Step added successfully",
+        data: newStep,
+      });
+    } catch (error) {
+      console.error(
+        "Add Step Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
       });
     }
   };
