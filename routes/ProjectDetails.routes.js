@@ -18,7 +18,7 @@ projectRouter.get(
 
 
 projectRouter.post(
-  "/:clientId/workflow-action",
+  "/:clientId/workflow-action/:step_id",
   userAuth,
   teamOnly,
   updateWorkflowStatus

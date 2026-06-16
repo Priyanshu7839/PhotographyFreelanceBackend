@@ -709,3 +709,64 @@ export const getClientAssets =
       });
     }
   };
+
+  export const updateClient =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const {
+        client_name,
+        event_date,
+        event_type,
+        event_location,
+      } = req.body;
+
+
+      const {
+        data: client,
+        error,
+      } = await supabase
+        .from("clients")
+        .update({
+          client_name,
+
+          event_date,
+
+          event_name:
+            event_type,
+
+          event_location,
+        })
+        .eq(
+          "client_id",
+          clientId
+        )
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Client updated successfully",
+        data: client,
+      });
+    } catch (error) {
+      console.error(
+        "Update Client Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
+      });
+    }
+  };

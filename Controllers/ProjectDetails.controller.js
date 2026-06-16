@@ -56,14 +56,18 @@ export const getClientHeader = async (req, res) => {
     const ongoingStep =
       projectSteps.find(
         (step) =>
-          step.step_status === "ongoing"
+          step.step_status === "in_progress"
       );
 
     let projectStatus = "Not Started";
 
     if (completedSteps === totalSteps && totalSteps > 0) {
       projectStatus = "Completed";
-    } else if (ongoingStep) {
+    } 
+    else if(completedSteps>0){
+      projectStatus = "In Progress"
+    }
+    else if (ongoingStep) {
       projectStatus = "In Progress";
     }
 
@@ -108,24 +112,30 @@ export const updateWorkflowStatus = async (
   res
 ) => {
   try {
-    const { clientId } = req.params;
+    const { clientId,step_id } = req.params;
     const { action } = req.body;
 
-    const memberId =
-      req.user.member_id;
 
+    
+    
+    
+    const memberId =
+    req.user.member_id;
+    
+    
     const {
       data: currentStep,
       error: stepError,
     } = await supabase
       .from("project_steps")
       .select("*")
-      .eq("client_id", clientId)
-      .eq(
-        "assigned_member_id",
-        memberId
-      )
-      .single();
+      .eq("project_step_id", step_id).single()
+
+      console.log(currentStep)
+      
+      
+
+     
 
     if (stepError || !currentStep) {
       return res.status(404).json({
@@ -398,6 +408,8 @@ export const getClientOverview = async (
       throw stepsError;
     }
 
+    
+
     // =========================
     // CURRENT STEP
     // =========================
@@ -410,6 +422,8 @@ export const getClientOverview = async (
       ) ||
       projectSteps[0] ||
       null;
+
+      
 
     let assignedMember =
       null;
