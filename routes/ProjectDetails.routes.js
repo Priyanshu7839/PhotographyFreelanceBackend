@@ -1,7 +1,7 @@
 import express from "express";
 
 import { teamOnly, userAuth } from "../middleware/auth.js";
-import { addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadFile, getAllGears, getClientHeader, getClientNotes, getClientOverview, getClientWorkflow, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
+import { addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadClientLicense, downloadFile, getAllGears, getClientHeader, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
 
 const projectRouter = express.Router();
 projectRouter.get(
@@ -135,4 +135,27 @@ teamOnly,
   addProjectStep
 );
 
+projectRouter.get(
+  "/contract-status/:clientId",
+  userAuth,
+  getContractStatus
+);
+
+projectRouter.put(
+  "/:clientId/sign-contract",
+  userAuth,
+  signContract
+);
+
+projectRouter.get(
+  "/:clientId/licenses",
+  userAuth,
+  getClientLicenses
+);
+
+projectRouter.get(
+  "/download/:fileId",
+  userAuth,
+  downloadClientLicense
+);
 export default projectRouter;

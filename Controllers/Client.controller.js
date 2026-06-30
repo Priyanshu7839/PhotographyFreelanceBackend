@@ -382,12 +382,36 @@ export const getAllClients = async (req, res) => {
   try {
     let clients = [];
 
-
-
-    // Admins see everything
+    // =========================
+    // CLIENT LOGIN
+    // =========================
     if (
+      req.user.user_type ===
+      "client"
+    ) {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("clients")
+        .select("*")
+        .eq(
+          "client_id",
+          req.user.client_id
+        );
+
+      if (error) throw error;
+
+      clients = data;
+    }
+
+    // =========================
+    // ADMIN / SUPERADMIN
+    // =========================
+    else if (
       req.user.role === "admin" ||
-      req.user.role === "superadmin"
+      req.user.role ===
+        "superadmin"
     ) {
       const {
         data,
@@ -402,9 +426,12 @@ export const getAllClients = async (req, res) => {
       if (error) throw error;
 
       clients = data;
-    } else {
-      // Team members only see assigned clients
+    }
 
+    // =========================
+    // TEAM MEMBER
+    // =========================
+    else {
       const {
         data: assignedSteps,
         error: assignedError,
@@ -413,20 +440,24 @@ export const getAllClients = async (req, res) => {
         .select("client_id")
         .eq(
           "assigned_member_id",
-          req.user.client_id
+          req.user.member_id
         );
 
-      if (assignedError) throw assignedError;
+      if (assignedError)
+        throw assignedError;
 
       const clientIds = [
         ...new Set(
           assignedSteps.map(
-            (step) => step.client_id
+            (step) =>
+              step.client_id
           )
         ),
       ];
 
-      if (clientIds.length === 0) {
+      if (
+        clientIds.length === 0
+      ) {
         return res.status(200).json({
           success: true,
           data: [],
@@ -439,7 +470,10 @@ export const getAllClients = async (req, res) => {
       } = await supabase
         .from("clients")
         .select("*")
-        .in("client_id", clientIds)
+        .in(
+          "client_id",
+          clientIds
+        )
         .order("created_at", {
           ascending: false,
         });
@@ -449,135 +483,188 @@ export const getAllClients = async (req, res) => {
       clients = data;
     }
 
-    const dashboardData = await Promise.all(
-      clients.map(async (client) => {
-        const {
-          data: projectSteps,
-          error: stepsError,
-        } = await supabase
-          .from("project_steps")
-          .select("*")
-          .eq(
-            "client_id",
-            client.client_id
-          );
-
-        if (stepsError) {
-          throw stepsError;
-        }
-
-        const totalSteps =
-          projectSteps.length;
-
-        const completedSteps =
-          projectSteps.filter(
-            (step) =>
-              step.step_status ===
-              "completed"
-          ).length;
-
-        const ongoingStep =
-          projectSteps.find(
-            (step) =>
-              step.step_status ===
-              "ongoing"
-          );
-
-        const progressPercentage =
-          totalSteps === 0
-            ? 0
-            : Math.round(
-                (completedSteps /
-                  totalSteps) *
-                  100
+    const dashboardData =
+      await Promise.all(
+        clients.map(
+          async (client) => {
+            const {
+              data: projectSteps,
+              error: stepsError,
+            } = await supabase
+              .from(
+                "project_steps"
+              )
+              .select("*")
+              .eq(
+                "client_id",
+                client.client_id
               );
 
-        const assignedMemberIds = [
-          ...new Set(
-            projectSteps
-              .filter(
+            if (stepsError) {
+              throw stepsError;
+            }
+
+            const totalSteps =
+              projectSteps.length;
+
+            const completedSteps =
+              projectSteps.filter(
                 (step) =>
-                  step.assigned_member_id
-              )
-              .map(
+                  step.step_status ===
+                  "completed"
+              ).length;
+
+            const progressPercentage =
+              totalSteps === 0
+                ? 0
+                : Math.round(
+                    (completedSteps /
+                      totalSteps) *
+                      100
+                  );
+
+            const allCompleted =
+              totalSteps > 0 &&
+              projectSteps.every(
                 (step) =>
-                  step.assigned_member_id
-              )
-          ),
-        ];
+                  step.step_status ===
+                  "completed"
+              );
 
-        let assignedMembers = [];
+            const allPending =
+              totalSteps > 0 &&
+              projectSteps.every(
+                (step) =>
+                  step.step_status ===
+                  "pending"
+              );
 
-        if (assignedMemberIds.length) {
-          const {
-            data: members,
-            error: membersError,
-          } = await supabase
-            .from("members")
-            .select(
-              "member_id, full_name"
-            )
-            .in(
-              "member_id",
-              assignedMemberIds
-            );
+            let currentStep =
+              "In Progress";
 
-          if (membersError) {
-            throw membersError;
+            if (
+              allCompleted
+            ) {
+              currentStep =
+                "Completed";
+            } else if (
+              allPending
+            ) {
+              currentStep =
+                "Not Started Yet";
+            }
+
+            const assignedMemberIds =
+              [
+                ...new Set(
+                  projectSteps
+                    .filter(
+                      (step) =>
+                        step.assigned_member_id
+                    )
+                    .map(
+                      (step) =>
+                        step.assigned_member_id
+                    )
+                ),
+              ];
+
+            let assignedMembers =
+              [];
+
+            if (
+              assignedMemberIds.length
+            ) {
+              const {
+                data: members,
+                error:
+                  membersError,
+              } = await supabase
+                .from(
+                  "members"
+                )
+                .select(
+                  "member_id, full_name"
+                )
+                .in(
+                  "member_id",
+                  assignedMemberIds
+                );
+
+              if (
+                membersError
+              ) {
+                throw membersError;
+              }
+
+              assignedMembers =
+                members?.map(
+                  (
+                    member
+                  ) =>
+                    member.full_name
+                      ?.split(
+                        " "
+                      )
+                      .map(
+                        (
+                          part
+                        ) =>
+                          part[0]
+                      )
+                      .join("")
+                      .slice(
+                        0,
+                        2
+                      )
+                      .toUpperCase()
+                ) || [];
+            }
+
+            return {
+              client_id:
+                client.client_id,
+
+              client_name:
+                client.client_name,
+
+              event_type:
+                client.event_name,
+
+              event_date:
+                client.event_date,
+
+              current_step:
+                currentStep,
+
+              progress_percentage:
+                progressPercentage,
+
+              assigned_members:
+                assignedMembers,
+            };
           }
-
-          assignedMembers =
-            members?.map(
-              (member) =>
-                member.full_name
-                  ?.split(" ")
-                  .map(
-                    (part) => part[0]
-                  )
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()
-            ) || [];
-        }
-
-        return {
-          client_id:
-            client.client_id,
-
-          client_name:
-            client.client_name,
-
-          event_type:
-            client.event_name,
-
-          event_date:
-            client.event_date,
-
-          current_step:
-            ongoingStep?.step_name ||
-            "Not Started Yet",
-
-          progress_percentage:
-            progressPercentage,
-
-          assigned_members:
-            assignedMembers,
-        };
-      })
-    );
+        )
+      );
 
     return res.status(200).json({
       success: true,
       data: dashboardData,
     });
   } catch (error) {
+    console.error(
+      "Get All Clients Error:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        error?.message ||
+        "Internal Server Error",
     });
   }
 };
-
 
 export const getClientAssets =
   async (req, res) => {

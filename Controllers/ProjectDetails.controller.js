@@ -1071,8 +1071,7 @@ export const addMoodboardDiscussion =
         req.body;
 
       if (
-        client_notes ===
-        undefined
+        !client_notes?.trim()
       ) {
         return res.status(400).json({
           success: false,
@@ -1086,9 +1085,10 @@ export const addMoodboardDiscussion =
         error: moodboardError,
       } = await supabase
         .from("moodboards")
-        .select(
-          "moodboard_id"
-        )
+        .select(`
+          moodboard_id,
+          client_notes
+        `)
         .eq(
           "client_id",
           clientId
@@ -1106,12 +1106,21 @@ export const addMoodboardDiscussion =
         });
       }
 
+      const existingNotes =
+        moodboard.client_notes || "";
+
+      const updatedNotes =
+        existingNotes.trim()
+          ? `${existingNotes}\n\n${client_notes.trim()}`
+          : client_notes.trim();
+
       const {
         error: updateError,
       } = await supabase
         .from("moodboards")
         .update({
-          client_notes,
+          client_notes:
+            updatedNotes,
           updated_at:
             new Date().toISOString(),
         })
@@ -2694,6 +2703,311 @@ export const downloadFile =
     } catch (error) {
       console.error(
         "Add Step Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+
+ export const getContractStatus =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const {
+        data: client,
+        error,
+      } = await supabase
+        .from("clients")
+        .select(`
+          contract_signed,
+          contract_signed_at,
+          sign_name,
+          created_at
+        `)
+        .eq(
+          "client_id",
+          clientId
+        )
+        .single();
+
+      if (
+        error ||
+        !client
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Client not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          contract_signed:
+            client.contract_signed,
+
+          contract_signed_at:
+            client.contract_signed_at,
+
+          sign_name:
+            client.sign_name,
+
+          created_at:
+            client.created_at,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Get Contract Status Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+
+  export const signContract =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const { sign_name } =
+        req.body;
+
+      if (
+        !sign_name?.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Sign name is required",
+        });
+      }
+
+      const {
+        data: client,
+        error: clientError,
+      } = await supabase
+        .from("clients")
+        .select("client_id")
+        .eq(
+          "client_id",
+          clientId
+        )
+        .single();
+
+      if (
+        clientError ||
+        !client
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Client not found",
+        });
+      }
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from("clients")
+        .update({
+          contract_signed: true,
+
+          contract_signed_at:
+            new Date().toISOString(),
+
+          sign_name:
+            sign_name.trim(),
+        })
+        .eq(
+          "client_id",
+          clientId
+        );
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Contract signed successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Sign Contract Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+
+export const getClientLicenses =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const {
+        data: files,
+        error,
+      } = await supabase
+        .from("files")
+        .select("*")
+        .eq(
+          "client_id",
+          clientId
+        )
+        .eq(
+          "file_category",
+          "license"
+        )
+        .order(
+          "created_at",
+          {
+            ascending: false,
+          }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      const formattedFiles =
+        await Promise.all(
+          (files || []).map(
+            async (file) => {
+              const command =
+                new GetObjectCommand({
+                  Bucket:
+                    process.env
+                      .R2_BUCKET,
+                  Key: file.object_storage_key,
+                });
+
+              const preview_url =
+                await getSignedUrl(
+                  r2,
+                  command,
+                  {
+                    expiresIn: 3600,
+                  }
+                );
+
+              return {
+                ...file,
+                preview_url,
+              };
+            }
+          )
+        );
+
+      return res.status(200).json({
+        success: true,
+        data: formattedFiles,
+      });
+    } catch (error) {
+      console.error(
+        "Get Client Licenses Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+  export const downloadClientLicense =
+  async (req, res) => {
+    try {
+      const { fileId } =
+        req.params;
+
+      const {
+        data: file,
+        error,
+      } = await supabase
+        .from("files")
+        .select(`
+          file_name,
+          object_storage_key
+        `)
+        .eq(
+          "file_id",
+          fileId
+        )
+        .single();
+
+      if (
+        error ||
+        !file
+      ) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "File not found",
+        });
+      }
+
+      const command =
+        new GetObjectCommand({
+          Bucket:
+            process.env
+              .R2_BUCKET_NAME,
+
+          Key: file.object_storage_key,
+
+          ResponseContentDisposition: `attachment; filename="${file.file_name}"`,
+        });
+
+      const downloadUrl =
+        await getSignedUrl(
+          r2,
+          command,
+          {
+            expiresIn: 300,
+          }
+        );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          download_url:
+            downloadUrl,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Download License Error:",
         error
       );
 
