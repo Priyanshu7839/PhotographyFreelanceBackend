@@ -116,6 +116,8 @@ export const updateWorkflowStatus = async (
     const { action } = req.body;
 
 
+  
+
     
     
     
@@ -167,53 +169,57 @@ export const updateWorkflowStatus = async (
         });
       }
 
-      const {
-        data: ongoingSteps,
-        error: ongoingError,
-      } = await supabase
-        .from("project_steps")
-        .select(`
-          step_name,
-          assigned_member_id
-        `)
-        .eq("client_id", clientId)
-        .eq(
-          "step_status",
-          "in_progress"
-        );
+     const {
+  data: ongoingSteps,
+  error: ongoingError,
+} = await supabase
+  .from("project_steps")
+  .select(`
+    step_name,
+    assigned_member_ids
+  `)
+  .eq("client_id", clientId)
+  .eq(
+    "step_status",
+    "in_progress"
+  );
 
       if (ongoingError) {
         throw ongoingError;
       }
 
-      const existingOngoing =
-        ongoingSteps?.find(
-          (step) =>
-            step.assigned_member_id !==
-            memberId
-        );
+     const existingOngoing =
+  ongoingSteps?.find(
+    (step) =>
+      !step.assigned_member_ids?.includes(
+        memberId
+      )
+  );
 
       if (existingOngoing) {
-        const {
-          data: member,
-          error: memberError,
-        } = await supabase
-          .from("members")
-          .select("full_name")
-          .eq(
-            "member_id",
-            existingOngoing.assigned_member_id
-          )
-          .single();
+       const {
+  data: members,
+  error: memberError,
+} = await supabase
+  .from("members")
+  .select("full_name")
+  .in(
+    "member_id",
+    existingOngoing.assigned_member_ids
+  );
 
-        if (memberError) {
-          throw memberError;
-        }
+if (memberError) {
+  throw memberError;
+}
 
-        return res.status(400).json({
-          success: false,
-          message: `${member.full_name} is currently working on ${existingOngoing.step_name}`,
-        });
+const memberNames = members
+  .map((m) => m.full_name)
+  .join(", ");
+
+return res.status(400).json({
+  success: false,
+  message: `${memberNames} are currently working on ${existingOngoing.step_name}`,
+});
       }
 
       const {
@@ -356,8 +362,7 @@ export const getClientOverview = async (
   res
 ) => {
   try {
-    const { clientId } =
-      req.params;
+    const { clientId } = req.params;
 
     // =========================
     // CLIENT DETAILS
@@ -408,60 +413,51 @@ export const getClientOverview = async (
       throw stepsError;
     }
 
-    
-
     // =========================
     // CURRENT STEP
     // =========================
 
-   const currentStep =
-  projectSteps.find(
-    (step) =>
-      step.step_status ===
-      "in_progress"
-  ) ||
-  projectSteps.find(
-    (step) =>
-      step.step_status ===
-      "pending"
-  ) ||
-  projectSteps[
-    projectSteps.length - 1
-  ] ||
-  null;
-
-  
-
-  
-
-      
-
-    let assignedMember =
+    const currentStep =
+      projectSteps.find(
+        (step) =>
+          step.step_status ===
+          "in_progress"
+      ) ||
+      projectSteps.find(
+        (step) =>
+          step.step_status ===
+          "pending"
+      ) ||
+      projectSteps[
+        projectSteps.length - 1
+      ] ||
       null;
 
+    let assignedMembers = [];
+
     if (
-      currentStep?.assigned_member_id
+      currentStep?.assigned_member_ids?.length
     ) {
       const {
-        data: member,
+        data: members,
         error: memberError,
       } = await supabase
         .from("members")
-        .select(
-          "full_name"
-        )
-        .eq(
+        .select("full_name")
+        .in(
           "member_id",
-          currentStep.assigned_member_id
-        )
-        .single();
+          currentStep.assigned_member_ids
+        );
 
       if (memberError) {
         throw memberError;
       }
 
-      assignedMember =
-        member.full_name;
+      assignedMembers =
+        members.map(
+          (member) =>
+            member.full_name
+        );
     }
 
     // =========================
@@ -639,15 +635,11 @@ export const getClientOverview = async (
 
     const uniqueMembers =
       new Set(
-        projectSteps
-          .filter(
-            (step) =>
-              step.assigned_member_id
-          )
-          .map(
-            (step) =>
-              step.assigned_member_id
-          )
+        projectSteps.flatMap(
+          (step) =>
+            step.assigned_member_ids ||
+            []
+        )
       );
 
     return res.status(200).json({
@@ -671,8 +663,8 @@ export const getClientOverview = async (
                 step_name:
                   currentStep.step_name,
 
-                assigned_member:
-                  assignedMember,
+                assigned_members:
+                  assignedMembers,
 
                 step_status:
                   currentStep.step_status,
@@ -747,28 +739,30 @@ export const getClientWorkflow = async (
       await Promise.all(
         projectSteps.map(
           async (step) => {
-            let assignedMember =
-              null;
+            let assignedMembers = [];
 
             if (
-              step.assigned_member_id
+              step.assigned_member_ids?.length
             ) {
               const {
-                data: member,
+                data: members,
+                error: memberError,
               } = await supabase
                 .from("members")
                 .select(
-                  "full_name"
+                  "member_id, full_name"
                 )
-                .eq(
+                .in(
                   "member_id",
-                  step.assigned_member_id
-                )
-                .single();
+                  step.assigned_member_ids
+                );
 
-              assignedMember =
-                member?.full_name ||
-                null;
+              if (memberError) {
+                throw memberError;
+              }
+
+              assignedMembers =
+                members || [];
             }
 
             return {
@@ -784,17 +778,19 @@ export const getClientWorkflow = async (
               step_status:
                 step.step_status,
 
-              assigned_member:
-                assignedMember,
+              assigned_members:
+                assignedMembers,
 
-              assigned_member_id:
-                step.assigned_member_id,
+              assigned_member_ids:
+                step.assigned_member_ids,
 
-                completed_at:step.completed_at,
+              completed_at:
+                step.completed_at,
 
               is_my_step:
-                step.assigned_member_id ===
-                memberId,
+                step.assigned_member_ids?.includes(
+                  memberId
+                ) || false,
             };
           }
         )
@@ -1400,15 +1396,14 @@ export const addMoodboardDiscussion =
     }
   };
 
- export const getProductionSetup =
+export const getProductionSetup =
   async (req, res) => {
     try {
       const { clientId } =
         req.params;
 
       const currentMemberId =
-        req.user.user_type ===
-        "member"
+        req.user.user_type === "member"
           ? req.user.member_id
           : null;
 
@@ -1419,7 +1414,7 @@ export const addMoodboardDiscussion =
       } = await supabase
         .from("project_steps")
         .select(`
-          assigned_member_id,
+          assigned_member_ids,
           step_name
         `)
         .eq(
@@ -1433,15 +1428,10 @@ export const addMoodboardDiscussion =
 
       const memberIds = [
         ...new Set(
-          projectSteps
-            .filter(
-              (step) =>
-                step.assigned_member_id
-            )
-            .map(
-              (step) =>
-                step.assigned_member_id
-            )
+          projectSteps.flatMap(
+            (step) =>
+              step.assigned_member_ids || []
+          )
         ),
       ];
 
@@ -1491,7 +1481,7 @@ export const addMoodboardDiscussion =
         throw assignmentsError;
       }
 
-      // Get all gears so all categories always exist
+      // Get all gears
       const {
         data: allGears,
         error: gearsError,
@@ -1508,89 +1498,88 @@ export const addMoodboardDiscussion =
       }
 
       const response =
-        members.map(
-          (member) => {
-            const memberGears =
-              gearAssignments.filter(
-                (assignment) =>
-                  assignment.member_id ===
-                  member.member_id
-              );
-
-            const memberStep =
-              projectSteps.find(
-                (step) =>
-                  step.assigned_member_id ===
-                  member.member_id
-              );
-
-            const categorized =
-              {};
-
-            // Create all categories dynamically
-            allGears.forEach(
-              (gear) => {
-                if (
-                  !categorized[
-                    gear.gear_category
-                  ]
-                ) {
-                  categorized[
-                    gear.gear_category
-                  ] = [];
-                }
-              }
+        members.map((member) => {
+          const memberGears =
+            gearAssignments.filter(
+              (assignment) =>
+                assignment.member_id ===
+                member.member_id
             );
 
-            // Populate assigned gears
-            memberGears.forEach(
-              (assignment) => {
-                const gear =
-                  allGears.find(
-                    (g) =>
-                      g.gear_id ===
-                      assignment.gear_id
-                  );
+          const memberSteps =
+            projectSteps.filter(
+              (step) =>
+                step.assigned_member_ids?.includes(
+                  member.member_id
+                )
+            );
 
-                if (!gear) return;
+          const categorized = {};
 
+          // Create all gear categories
+          allGears.forEach(
+            (gear) => {
+              if (
+                !categorized[
+                  gear.gear_category
+                ]
+              ) {
                 categorized[
                   gear.gear_category
-                ].push({
-                  gear_id:
-                    gear.gear_id,
-
-                  gear_name:
-                    gear.gear_name,
-                });
+                ] = [];
               }
-            );
+            }
+          );
 
-            return {
-              member_id:
+          // Populate assigned gears
+          memberGears.forEach(
+            (assignment) => {
+              const gear =
+                allGears.find(
+                  (g) =>
+                    g.gear_id ===
+                    assignment.gear_id
+                );
+
+              if (!gear) return;
+
+              categorized[
+                gear.gear_category
+              ].push({
+                gear_id:
+                  gear.gear_id,
+                gear_name:
+                  gear.gear_name,
+              });
+            }
+          );
+
+          return {
+            member_id:
+              member.member_id,
+
+            member_name:
+              member.full_name,
+
+            role:
+              member.role,
+
+            step_names:
+              memberSteps.map(
+                (step) =>
+                  step.step_name
+              ),
+
+            is_my_step:
+              currentMemberId !==
+                null &&
+              currentMemberId ===
                 member.member_id,
 
-              member_name:
-                member.full_name,
-
-              role:
-                member.role,
-
-              step_name:
-                memberStep?.step_name ||
-                null,
-
-              is_my_step:
-                currentMemberId !==
-                  null &&
-                currentMemberId ===
-                  member.member_id,
-
-              gears_using:
-                categorized,
-            };
-          }
-        );
+            gears_using:
+              categorized,
+          };
+        });
 
       return res.status(200).json({
         success: true,
@@ -1682,7 +1671,7 @@ export const addMoodboardDiscussion =
     }
   };
 
-  export const assignGears =
+ export const assignGears =
   async (req, res) => {
     try {
       const { clientId } =
@@ -1701,6 +1690,34 @@ export const addMoodboardDiscussion =
 
       const memberId =
         req.user.member_id;
+
+      // Ensure member is assigned to at least one workflow step
+      const {
+        data: assignedSteps,
+        error: assignedStepsError,
+      } = await supabase
+        .from("project_steps")
+        .select("project_step_id")
+        .eq(
+          "client_id",
+          clientId
+        )
+        .contains(
+          "assigned_member_ids",
+          [memberId]
+        );
+
+      if (assignedStepsError) {
+        throw assignedStepsError;
+      }
+
+      if (!assignedSteps.length) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You are not assigned to this project.",
+        });
+      }
 
       const { gears_using } =
         req.body;
@@ -1879,10 +1896,8 @@ export const addMoodboardDiscussion =
             (gearId) => ({
               client_id:
                 clientId,
-
               member_id:
                 memberId,
-
               gear_id: gearId,
             })
           );
@@ -1934,7 +1949,7 @@ export const addMoodboardDiscussion =
       } = await supabase
         .from("project_steps")
         .select(
-          "assigned_member_id"
+          "assigned_member_ids"
         )
         .eq(
           "client_id",
@@ -1947,15 +1962,10 @@ export const addMoodboardDiscussion =
 
       const totalMembers =
         new Set(
-          projectSteps
-            .filter(
-              (step) =>
-                step.assigned_member_id
-            )
-            .map(
-              (step) =>
-                step.assigned_member_id
-            )
+          projectSteps.flatMap(
+            (step) =>
+              step.assigned_member_ids || []
+          )
         ).size;
 
       // Get assigned gears
@@ -1982,7 +1992,7 @@ export const addMoodboardDiscussion =
         ),
       ];
 
-      // Get all categories
+      // Get all gear categories
       const {
         data: allGears,
         error: gearsError,
@@ -2000,7 +2010,7 @@ export const addMoodboardDiscussion =
       const gearSummary =
         {};
 
-      // Initialize all categories to 0
+      // Initialize all categories
       allGears.forEach(
         (gear) => {
           if (
@@ -2015,7 +2025,7 @@ export const addMoodboardDiscussion =
         }
       );
 
-      // Count assigned gears by category
+      // Count assigned gears
       allGears.forEach(
         (gear) => {
           if (
@@ -2054,7 +2064,6 @@ export const addMoodboardDiscussion =
       });
     }
   };
-
   export const addTravelDiscussion =
   async (req, res) => {
     try {
@@ -3019,3 +3028,196 @@ export const getClientLicenses =
       });
     }
   };
+
+
+  export const getClientInvoice = async (req, res) => {
+  try {
+    const { client_id } = req.params;
+
+    if (!client_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Client ID is required",
+      });
+    }
+
+    // Fetch Invoice
+    const {
+      data: invoice,
+      error: invoiceError,
+    } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("client_id", client_id)
+      .single();
+
+    if (invoiceError) {
+      if (invoiceError.code === "PGRST116") {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found",
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: invoiceError.message,
+      });
+    }
+
+    // Fetch Invoice Items
+    const {
+      data: invoiceItems,
+      error: itemsError,
+    } = await supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", invoice.invoice_id)
+      .order("invoice_item_id", {
+        ascending: true,
+      });
+
+    if (itemsError) {
+      return res.status(500).json({
+        success: false,
+        message: itemsError.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        invoice,
+        invoice_items: invoiceItems,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+export const addInvoiceItem = async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { item_name, quantity, rate } = req.body;
+
+    if (!item_name || !quantity || rate === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "item_name, quantity and rate are required",
+      });
+    }
+
+    // ----------------------------------------------------
+    // GET CLIENT INVOICE
+    // ----------------------------------------------------
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("client_id", clientId)
+      .single();
+
+    if (invoiceError || !invoice) {
+      return res.status(404).json({
+        success: false,
+        message: "Invoice not found",
+      });
+    }
+
+    // ----------------------------------------------------
+    // CREATE INVOICE ITEM
+    // ----------------------------------------------------
+
+    const amount = Number(quantity) * Number(rate);
+
+    const { error: itemError } = await supabase
+      .from("invoice_items")
+      .insert([
+        {
+          invoice_id: invoice.invoice_id,
+          item_name,
+          quantity: Number(quantity),
+          rate: Number(rate),
+          amount,
+        },
+      ]);
+
+    if (itemError) {
+      return res.status(500).json({
+        success: false,
+        message: itemError.message,
+      });
+    }
+
+    // ----------------------------------------------------
+    // FETCH ALL INVOICE ITEMS
+    // ----------------------------------------------------
+
+    const { data: invoiceItems, error: itemsError } = await supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", invoice.invoice_id);
+
+    if (itemsError) {
+      return res.status(500).json({
+        success: false,
+        message: itemsError.message,
+      });
+    }
+
+    // ----------------------------------------------------
+    // RECALCULATE TOTALS
+    // ----------------------------------------------------
+
+    const subtotalAmount = invoiceItems.reduce(
+      (sum, item) => sum + Number(item.amount),
+      0
+    );
+
+    const finalAmount =
+      subtotalAmount +
+      Number(invoice.tax_amount) +
+      Number(invoice.travel_fee) -
+      Number(invoice.discount_amount);
+
+    const amountDue = finalAmount - Number(invoice.amount_paid);
+
+    // ----------------------------------------------------
+    // UPDATE INVOICE
+    // ----------------------------------------------------
+
+    const { data: updatedInvoice, error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        subtotal_amount: subtotalAmount,
+        final_amount: finalAmount,
+        amount_due: amountDue,
+      })
+      .eq("invoice_id", invoice.invoice_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({
+        success: false,
+        message: updateError.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Invoice item added successfully",
+      data: updatedInvoice,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

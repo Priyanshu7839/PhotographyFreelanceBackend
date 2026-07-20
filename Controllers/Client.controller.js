@@ -12,6 +12,7 @@ export const createClient = async (req, res) => {
       clientName,
       eventType,
       eventDate,
+      eventEndDate,
       selectedLocation,
       workflow_template_id,
       workflowSteps,
@@ -94,6 +95,8 @@ export const createClient = async (req, res) => {
 
           event_date: eventDate,
 
+          event_end_date: eventEndDate,
+
           event_location:
             selectedLocation,
 
@@ -165,35 +168,31 @@ export const createClient = async (req, res) => {
       projectSteps =
         workflowStepsFromDB.map(
           (step) => {
-            const assignedStep =
-              teamAssignments?.find(
-                (
-                  assignment
-                ) =>
-                  assignment.workflow_step_id ===
-                  step.workflow_step_id
-              );
+           const assignedStep =
+  teamAssignments?.find(
+    (assignment) =>
+      assignment.workflow_step_id ===
+      step.workflow_step_id
+  );
 
-            return {
-              client_id:
-                clientData.client_id,
+return {
+  client_id: clientData.client_id,
 
-              workflow_step_id:
-                step.workflow_step_id,
+  workflow_step_id:
+    step.workflow_step_id,
 
-              assigned_member_id:
-                assignedStep?.assigned_member_id ||
-                null,
+  assigned_member_ids:
+    assignedStep?.assigned_member_ids || [],
 
-              step_name:
-                step.step_name,
+  step_name:
+    step.step_name,
 
-              step_order:
-                step.step_order,
+  step_order:
+    step.step_order,
 
-              step_status:
-                "pending",
-            };
+  step_status:
+    "pending",
+};
           }
         );
     }
@@ -203,36 +202,33 @@ export const createClient = async (req, res) => {
       projectSteps =
         workflowSteps.map(
           (step, index) => {
-            const assignedStep =
-              teamAssignments?.find(
-                (
-                  assignment
-                ) =>
-                  assignment.workflow_step_id ===
-                  step.workflow_step_id
-              );
+          const assignedStep =
+  teamAssignments?.find(
+    (assignment) =>
+      assignment.workflow_step_id ===
+      step.workflow_step_id
+  );
 
-            return {
-              client_id:
-                clientData.client_id,
+return {
+  client_id:
+    clientData.client_id,
 
-              workflow_step_id:
-                null,
+  workflow_step_id:
+    null,
 
-              assigned_member_id:
-                assignedStep?.assigned_member_id ||
-                null,
+  assigned_member_ids:
+    assignedStep?.assigned_member_ids || [],
 
-              step_name:
-                step.step_name,
+  step_name:
+    step.step_name,
 
-              step_order:
-                step.step_order ||
-                index + 1,
+  step_order:
+    step.step_order ||
+    index + 1,
 
-              step_status:
-                "pending",
-            };
+  step_status:
+    "pending",
+};
           }
         );
     }
@@ -251,25 +247,102 @@ export const createClient = async (req, res) => {
       });
     }
 
-    // create default moodboard
-    const {
-      error: moodboardError,
-    } = await supabase
-      .from("moodboards")
-      .insert([
-        {
-          client_id:
-            clientData.client_id,
-        },
-      ]);
+   // create default moodboard
+const {
+  error: moodboardError,
+} = await supabase
+  .from("moodboards")
+  .insert([
+    {
+      client_id: clientData.client_id,
+    },
+  ]);
 
-    if (moodboardError) {
-      return res.status(500).json({
-        success: false,
-        message:
-          moodboardError.message,
-      });
-    }
+if (moodboardError) {
+  return res.status(500).json({
+    success: false,
+    message: moodboardError.message,
+  });
+}
+
+// ----------------------------------------------------
+// CREATE DEFAULT INVOICE
+// ----------------------------------------------------
+
+const {
+  data: invoiceData,
+  error: invoiceError,
+} = await supabase
+  .from("invoices")
+  .insert([
+    {
+      client_id: clientData.client_id,
+
+      invoice_number: `INV-${Date.now()}`,
+
+      invoice_status: "pending",
+
+      subtotal_amount: 0,
+
+      tax_amount: 0,
+
+      discount_amount: 0,
+
+      travel_fee: travelFee,
+
+      final_amount: travelFee,
+
+      amount_paid: 0,
+
+      amount_due: travelFee,
+
+      payment_method: null,
+
+      issue_date: eventDate,
+
+      due_date: eventDate,
+
+      notes: null,
+    },
+  ])
+  .select()
+  .single();
+
+if (invoiceError) {
+  return res.status(500).json({
+    success: false,
+    message: invoiceError.message,
+  });
+}
+
+// ----------------------------------------------------
+// CREATE DEFAULT INVOICE ITEM
+// ----------------------------------------------------
+
+const {
+  error: invoiceItemError,
+} = await supabase
+  .from("invoice_items")
+  .insert([
+    {
+      invoice_id: invoiceData.invoice_id,
+
+      item_name: "Photography Package",
+
+      quantity: 1,
+
+      rate: 0,
+
+      amount: 0,
+    },
+  ]);
+
+if (invoiceItemError) {
+  return res.status(500).json({
+    success: false,
+    message: invoiceItemError.message,
+  });
+}
 
     return res.status(201).json({
       success: true,
@@ -433,16 +506,15 @@ export const getAllClients = async (req, res) => {
     // =========================
     else {
       const {
-        data: assignedSteps,
-        error: assignedError,
-      } = await supabase
-        .from("project_steps")
-        .select("client_id")
-        .eq(
-          "assigned_member_id",
-          req.user.member_id
-        );
-
+  data: assignedSteps,
+  error: assignedError,
+} = await supabase
+  .from("project_steps")
+  .select("client_id")
+  .contains(
+    "assigned_member_ids",
+    [req.user.member_id]
+  );
       if (assignedError)
         throw assignedError;
 
@@ -557,15 +629,9 @@ export const getAllClients = async (req, res) => {
             const assignedMemberIds =
               [
                 ...new Set(
-                  projectSteps
-                    .filter(
-                      (step) =>
-                        step.assigned_member_id
-                    )
-                    .map(
-                      (step) =>
-                        step.assigned_member_id
-                    )
+                 projectSteps.flatMap(
+  step => step.assigned_member_ids || []
+)
                 ),
               ];
 

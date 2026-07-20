@@ -1,7 +1,7 @@
 import express from "express";
 
 import { teamOnly, userAuth } from "../middleware/auth.js";
-import { addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadClientLicense, downloadFile, getAllGears, getClientHeader, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
+import { addInvoiceItem, addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadClientLicense, downloadFile, getAllGears, getClientHeader, getClientInvoice, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
 
 const projectRouter = express.Router();
 projectRouter.get(
@@ -157,5 +157,17 @@ projectRouter.get(
   "/download/:fileId",
   userAuth,
   downloadClientLicense
+);
+
+projectRouter.get(
+  "/:client_id/invoice",
+  userAuth,
+  getClientInvoice
+);
+
+projectRouter.post(
+  "/:clientId/invoices/items",
+  userAuth,
+  addInvoiceItem
 );
 export default projectRouter;
