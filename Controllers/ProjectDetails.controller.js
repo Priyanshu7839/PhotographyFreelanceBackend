@@ -3221,3 +3221,336 @@ export const addInvoiceItem = async (req, res) => {
     });
   }
 };
+
+
+export const updateInvoiceItem = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      invoice_item_id,
+      invoice_id,
+      item_name,
+      quantity,
+      rate,
+    } = req.body;
+
+    console.log(invoice_item_id)
+    console.log(rate)
+
+    if (
+      !invoice_item_id ||
+      !invoice_id
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "invoice_item_id and invoice_id are required",
+      });
+    }
+
+    const amount =
+      Number(quantity) *
+      Number(rate);
+
+    // -----------------------------------
+    // Update invoice item
+    // -----------------------------------
+
+    const {
+      error: updateItemError,
+    } = await supabase
+      .from("invoice_items")
+      .update({
+        item_name,
+        quantity,
+        rate,
+        amount,
+      })
+      .eq(
+        "invoice_item_id",
+        invoice_item_id
+      );
+
+    if (updateItemError) {
+      throw updateItemError;
+    }
+
+    // -----------------------------------
+    // Fetch all invoice items
+    // -----------------------------------
+
+    const {
+      data: invoiceItems,
+      error: itemsError,
+    } = await supabase
+      .from("invoice_items")
+      .select("amount")
+      .eq(
+        "invoice_id",
+        invoice_id
+      );
+
+    if (itemsError) {
+      throw itemsError;
+    }
+
+    const subtotal =
+      invoiceItems.reduce(
+        (sum, item) =>
+          sum +
+          Number(item.amount),
+        0
+      );
+
+    // -----------------------------------
+    // Fetch invoice
+    // -----------------------------------
+
+    const {
+      data: invoice,
+      error: invoiceError,
+    } = await supabase
+      .from("invoices")
+      .select(`
+        tax_amount,
+        discount_amount,
+        travel_fee,
+        amount_paid
+      `)
+      .eq(
+        "invoice_id",
+        invoice_id
+      )
+      .single();
+
+    if (invoiceError) {
+      throw invoiceError;
+    }
+
+    const tax =
+      Number(
+        invoice.tax_amount
+      ) || 0;
+
+    const discount =
+      Number(
+        invoice.discount_amount
+      ) || 0;
+
+    const travelFee =
+      Number(
+        invoice.travel_fee
+      ) || 0;
+
+    const amountPaid =
+      Number(
+        invoice.amount_paid
+      ) || 0;
+
+    const finalAmount =
+      subtotal +
+      tax +
+      travelFee -
+      discount;
+
+    const amountDue =
+      finalAmount -
+      amountPaid;
+
+    // -----------------------------------
+    // Update invoice
+    // -----------------------------------
+
+    const {
+      error: updateInvoiceError,
+    } = await supabase
+      .from("invoices")
+      .update({
+        subtotal_amount:
+          subtotal,
+
+        final_amount:
+          finalAmount,
+
+        amount_due:
+          amountDue,
+      })
+      .eq(
+        "invoice_id",
+        invoice_id
+      );
+
+    if (updateInvoiceError) {
+      throw updateInvoiceError;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Invoice updated successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message,
+    });
+  }
+};
+
+export const deleteInvoiceItem = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      invoice_item_id,
+      invoice_id,
+    } = req.body;
+
+    if (
+      !invoice_item_id ||
+      !invoice_id
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "invoice_item_id and invoice_id are required",
+      });
+    }
+
+    // -----------------------------
+    // Delete invoice item
+    // -----------------------------
+
+    const {
+      error: deleteError,
+    } = await supabase
+      .from("invoice_items")
+      .delete()
+      .eq(
+        "invoice_item_id",
+        invoice_item_id
+      );
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    // -----------------------------
+    // Fetch remaining invoice items
+    // -----------------------------
+
+    const {
+      data: invoiceItems,
+      error: itemsError,
+    } = await supabase
+      .from("invoice_items")
+      .select("amount")
+      .eq(
+        "invoice_id",
+        invoice_id
+      );
+
+    if (itemsError) {
+      throw itemsError;
+    }
+
+    const subtotal =
+      invoiceItems.reduce(
+        (sum, item) =>
+          sum + Number(item.amount),
+        0
+      );
+
+    // -----------------------------
+    // Fetch invoice
+    // -----------------------------
+
+    const {
+      data: invoice,
+      error: invoiceError,
+    } = await supabase
+      .from("invoices")
+      .select(`
+        tax_amount,
+        discount_amount,
+        travel_fee,
+        amount_paid
+      `)
+      .eq(
+        "invoice_id",
+        invoice_id
+      )
+      .single();
+
+    if (invoiceError) {
+      throw invoiceError;
+    }
+
+    const tax =
+      Number(invoice.tax_amount) || 0;
+
+    const discount =
+      Number(invoice.discount_amount) || 0;
+
+    const travelFee =
+      Number(invoice.travel_fee) || 0;
+
+    const amountPaid =
+      Number(invoice.amount_paid) || 0;
+
+    const finalAmount =
+      subtotal +
+      tax +
+      travelFee -
+      discount;
+
+    const amountDue =
+      finalAmount -
+      amountPaid;
+
+    // -----------------------------
+    // Update invoice
+    // -----------------------------
+
+    const {
+      error: updateInvoiceError,
+    } = await supabase
+      .from("invoices")
+      .update({
+        subtotal_amount:
+          subtotal,
+        final_amount:
+          finalAmount,
+        amount_due:
+          amountDue,
+      })
+      .eq(
+        "invoice_id",
+        invoice_id
+      );
+
+    if (updateInvoiceError) {
+      throw updateInvoiceError;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Invoice item deleted successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message,
+    });
+  }
+};

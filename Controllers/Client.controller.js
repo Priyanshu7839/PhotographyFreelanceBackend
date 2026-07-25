@@ -32,55 +32,8 @@ export const createClient = async (req, res) => {
       });
     }
 
-    const OFFICE_ADDRESS = 'New york'
-    const freeMiles = 20;
-    let drivingDistance = 0;
-    let travelFee = 0;
 
-    try {
-      const distanceResponse =
-        await axios.get(
-          "https://driving-distance-calculator-between-two-points.p.rapidapi.com/data",
-          {
-            params: {
-              origin: OFFICE_ADDRESS,
-              destination: selectedLocation,
-            },
-            headers: {
-              "x-rapidapi-key":'d3cfd720b6msh644a12c2e9f2d08p186288jsn9c9392aa203b',
-              "x-rapidapi-host":
-                "driving-distance-calculator-between-two-points.p.rapidapi.com",
-              "Content-Type":
-                "application/json",
-            },
-          }
-        );
-
-      const distanceData =
-        distanceResponse.data?.body
-          ?.distance;
-
-      if (distanceData) {
-        drivingDistance = Number(
-          distanceData.kilometers.toFixed(
-            2
-          )
-        );
-
-        travelFee = Number(
-          (
-            (drivingDistance - freeMiles) * 5
-          ).toFixed(2)
-        );
-      }
-    } catch (distanceError) {
-      console.error(
-        "Distance Calculation Error:",
-        distanceError?.response
-          ?.data || distanceError
-      );
-    }
-
+    
     // create client
     const {
       data: clientData,
@@ -114,11 +67,6 @@ export const createClient = async (req, res) => {
 
           password: "123456",
 
-          driving_distance:
-            drivingDistance,
-
-          travel_fee:
-            travelFee,
 
           workflow_template_id:
             workflow_template_id ||
@@ -184,6 +132,15 @@ return {
   assigned_member_ids:
     assignedStep?.assigned_member_ids || [],
 
+  step_date:
+    assignedStep?.step_date || null,
+
+  step_time:
+    assignedStep?.step_time || null,
+
+  venue:
+    assignedStep?.venue || null,
+
   step_name:
     step.step_name,
 
@@ -218,6 +175,15 @@ return {
 
   assigned_member_ids:
     assignedStep?.assigned_member_ids || [],
+
+  step_date:
+    assignedStep?.step_date || null,
+
+  step_time:
+    assignedStep?.step_time || null,
+
+  venue:
+    assignedStep?.venue || null,
 
   step_name:
     step.step_name,

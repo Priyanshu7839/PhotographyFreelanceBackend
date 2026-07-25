@@ -1,7 +1,7 @@
 import express from "express";
 
 import { teamOnly, userAuth } from "../middleware/auth.js";
-import { addInvoiceItem, addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteMoodboardSong, downloadClientLicense, downloadFile, getAllGears, getClientHeader, getClientInvoice, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
+import { addInvoiceItem, addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteInvoiceItem, deleteMoodboardSong, downloadClientLicense, downloadFile, getAllGears, getClientHeader, getClientInvoice, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateInvoiceItem, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
 
 const projectRouter = express.Router();
 projectRouter.get(
@@ -170,4 +170,8 @@ projectRouter.post(
   userAuth,
   addInvoiceItem
 );
+
+
+projectRouter.post("/updateInvoiceItem",userAuth, updateInvoiceItem);
+projectRouter.post("/deleteInvoiceItem",userAuth, deleteInvoiceItem);
 export default projectRouter;
