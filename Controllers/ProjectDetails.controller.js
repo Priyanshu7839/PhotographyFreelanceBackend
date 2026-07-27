@@ -7,21 +7,16 @@ export const getClientHeader = async (req, res) => {
   try {
     const { clientId } = req.params;
    
-
-    const {
-      data: client,
-      error: clientError,
-    } = await supabase
-      .from("clients")
-      .select(`
-        client_id,
-        client_name,
-        event_name,
-        event_date,
-        event_location
-      `)
-      .eq("client_id", clientId)
-      .single();
+const { data: client, error: clientError } =
+  await supabase
+    .from("clients")
+    .select(`
+      client_id,
+      client_name,
+      event_name
+    `)
+    .eq("client_id", clientId)
+    .single();
 
     if (clientError) {
       return res.status(404).json({
@@ -30,13 +25,21 @@ export const getClientHeader = async (req, res) => {
       });
     }
 
-    const {
-      data: projectSteps,
-      error: stepsError,
-    } = await supabase
-      .from("project_steps")
-      .select("step_status")
-      .eq("client_id", clientId);
+ const {
+  data: projectSteps,
+  error: stepsError,
+} = await supabase
+  .from("project_steps")
+  .select(`
+    step_status,
+    step_time,
+    venue,
+    step_order
+  `)
+  .eq("client_id", clientId)
+  .order("step_order", {
+    ascending: true,
+  });
 
     if (stepsError) {
       return res.status(500).json({
@@ -2576,155 +2579,98 @@ export const downloadFile =
     }
   };
 
-  export const addProjectStep =
-  async (req, res) => {
-    try {
-      const { clientId } =
-        req.params;
+export const addProjectStep = async (req, res) => {
+  try {
+    const { clientId } = req.params;
 
-      const {
-        step_name,
-        assigned_member_id,
-        step_order,
-      } = req.body;
+    const {
+      step_name,
+      assigned_member_ids,
+      step_order,
+      venue,
+      date,
+      time,
+    } = req.body;
 
-      if (
-        !step_name ||
-        !step_order
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "step_name and step_order are required",
-        });
-      }
+    if (!step_name || !step_order) {
+      return res.status(400).json({
+        success: false,
+        message: "step_name and step_order are required",
+      });
+    }
 
-      // Get existing steps
-      const {
-        data: existingSteps,
-        error: fetchError,
-      } = await supabase
+    const {
+      data: existingSteps,
+      error: fetchError,
+    } = await supabase
+      .from("project_steps")
+      .select("project_step_id, step_order")
+      .eq("client_id", clientId)
+      .order("step_order", {
+        ascending: true,
+      });
+
+    if (fetchError) throw fetchError;
+
+    const finalOrder = Math.min(
+      Number(step_order),
+      existingSteps.length + 1
+    );
+
+    const stepsToShift = existingSteps.filter(
+      (step) => step.step_order >= finalOrder
+    );
+
+    for (const step of stepsToShift) {
+      const { error } = await supabase
         .from("project_steps")
-        .select(`
-          project_step_id,
-          step_order
-        `)
+        .update({
+          step_order: step.step_order + 1,
+        })
         .eq(
-          "client_id",
-          clientId
-        )
-        .order(
-          "step_order",
-          {
-            ascending: true,
-          }
+          "project_step_id",
+          step.project_step_id
         );
 
-      if (fetchError) {
-        throw fetchError;
-      }
+      if (error) throw error;
+    }
 
-      const finalOrder =
-        Math.min(
-          Number(step_order),
-          existingSteps.length +
-            1
-        );
-
-      // Shift all affected steps
-      const stepsToShift =
-        existingSteps.filter(
-          (step) =>
-            step.step_order >=
-            finalOrder
-        );
-
-      for (const step of stepsToShift) {
-        const {
-          error:
-            updateError,
-        } = await supabase
-          .from(
-            "project_steps"
-          )
-          .update({
-            step_order:
-              step.step_order +
-              1,
-          })
-          .eq(
-            "project_step_id",
-            step.project_step_id
-          );
-
-        if (
-          updateError
-        ) {
-          throw updateError;
-        }
-      }
-
-      // Insert new step
-      const {
-        data: newStep,
-        error:
-          insertError,
-      } = await supabase
-        .from(
-          "project_steps"
-        )
-        .insert([
-          {
-            client_id:
-              clientId,
-
-            workflow_step_id:
-              null,
-
-            assigned_member_id:
-              assigned_member_id ||
-              null,
-
-            step_name,
-
-            step_order:
-              finalOrder,
-
-            step_status:
-              "pending",
-          },
-        ])
+    const { data: newStep, error: insertError } =
+      await supabase
+        .from("project_steps")
+        .insert({
+          client_id: clientId,
+          workflow_step_id: null,
+          assigned_member_ids:
+            assigned_member_ids ?? [],
+          step_name,
+          step_order: finalOrder,
+          step_status: "pending",
+          venue: venue ?? null,
+          step_date: date ?? null,
+          step_time: time ?? null,
+        })
         .select()
         .single();
 
-      if (
-        insertError
-      ) {
-        throw insertError;
-      }
+    if (insertError) throw insertError;
 
-      return res.status(201).json({
-        success: true,
-        message:
-          "Step added successfully",
-        data: newStep,
-      });
-    } catch (error) {
-      console.error(
-        "Add Step Error:",
-        error
-      );
+    return res.status(201).json({
+      success: true,
+      message: "Step added successfully",
+      data: newStep,
+    });
+  } catch (error) {
+    console.error("Add Step Error:", error);
 
-      return res.status(500).json({
-        success: false,
-        message:
-          error?.message ||
-          "Internal Server Error",
-      });
-    }
-  };
-
-
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ||
+        "Internal Server Error",
+    });
+  }
+};
  export const getContractStatus =
   async (req, res) => {
     try {
@@ -3551,6 +3497,306 @@ export const deleteInvoiceItem = async (
       success: false,
       message:
         error.message,
+    });
+  }
+};
+
+
+export const getProjectStepsForTravel =
+  async (req, res) => {
+    try {
+      const { clientId } =
+        req.params;
+
+      const {
+        data: projectSteps,
+        error,
+      } = await supabase
+        .from("project_steps")
+        .select(`
+          project_step_id,
+          step_name,
+          venue,
+          travel_distance
+        `)
+        .eq(
+          "client_id",
+          clientId
+        )
+        .order("step_order", {
+          ascending: true,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: projectSteps,
+      });
+    } catch (error) {
+      console.error(
+        "Get Project Steps Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+
+
+  export const updateProjectStepTravel =
+  async (req, res) => {
+    try {
+      const { clientId, projectStepId } =
+        req.params;
+
+      const {
+        venue,
+        travel_distance,
+      } = req.body;
+
+      // -----------------------------
+      // CONFIG
+      // -----------------------------
+
+      const FREE_MILES = 20;
+      const RATE_PER_MILE = 0.70;
+
+      // -----------------------------
+      // Update project step
+      // -----------------------------
+
+      const {
+        error: updateStepError,
+      } = await supabase
+        .from("project_steps")
+        .update({
+          venue,
+          travel_distance,
+        })
+        .eq(
+          "project_step_id",
+          projectStepId
+        )
+        .eq(
+          "client_id",
+          clientId
+        );
+
+      if (updateStepError) {
+        throw updateStepError;
+      }
+
+      // -----------------------------
+      // Get all project steps
+      // -----------------------------
+
+      const {
+        data: projectSteps,
+        error: projectStepsError,
+      } = await supabase
+        .from("project_steps")
+        .select("travel_distance")
+        .eq(
+          "client_id",
+          clientId
+        );
+
+      if (projectStepsError) {
+        throw projectStepsError;
+      }
+
+      const totalMiles =
+        projectSteps.reduce(
+          (sum, step) =>
+            sum +
+            Number(
+              step.travel_distance || 0
+            ),
+          0
+        );
+
+      const billableMiles = Math.max(
+        totalMiles - FREE_MILES,
+        0
+      );
+
+      const travelFee =
+        billableMiles *
+        RATE_PER_MILE;
+
+      // -----------------------------
+      // Update Invoice
+      // -----------------------------
+
+      const {
+        data: invoice,
+        error: invoiceError,
+      } = await supabase
+        .from("invoices")
+        .select(`
+          invoice_id,
+          subtotal_amount,
+          tax_amount,
+          discount_amount,
+          amount_paid
+        `)
+        .eq(
+          "client_id",
+          clientId
+        )
+        .single();
+
+      if (invoiceError) {
+        throw invoiceError;
+      }
+
+      const subtotal =
+        Number(
+          invoice.subtotal_amount
+        ) || 0;
+
+      const tax =
+        Number(
+          invoice.tax_amount
+        ) || 0;
+
+      const discount =
+        Number(
+          invoice.discount_amount
+        ) || 0;
+
+      const amountPaid =
+        Number(
+          invoice.amount_paid
+        ) || 0;
+
+      const finalAmount =
+        subtotal +
+        tax +
+        travelFee -
+        discount;
+
+      const amountDue =
+        finalAmount -
+        amountPaid;
+
+      const {
+        error: updateInvoiceError,
+      } = await supabase
+        .from("invoices")
+        .update({
+          travel_fee: travelFee,
+          final_amount:
+            finalAmount,
+          amount_due:
+            amountDue,
+        })
+        .eq(
+          "invoice_id",
+          invoice.invoice_id
+        );
+
+      if (updateInvoiceError) {
+        throw updateInvoiceError;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Travel information updated successfully.",
+        data: {
+          total_miles:
+            totalMiles,
+          billable_miles:
+            billableMiles,
+          travel_fee:
+            travelFee,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Update Travel Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          error.message ||
+          "Internal Server Error",
+      });
+    }
+  };
+
+
+
+  export const updateProjectStep = async (req, res) => {
+  try {
+    const { project_step_id } = req.params;
+
+    const {
+      step_name,
+      assigned_member_ids,
+      venue,
+      scheduled_time,
+    } = req.body;
+
+    const updateData = {};
+
+    if (step_name !== undefined)
+      updateData.step_name = step_name;
+
+    if (assigned_member_ids !== undefined)
+      updateData.assigned_member_ids =
+        assigned_member_ids;
+
+    if (venue !== undefined)
+      updateData.venue = venue;
+
+    if (scheduled_time !== undefined)
+      updateData.scheduled_time =
+        scheduled_time;
+
+    const { data, error } = await supabase
+      .from("project_steps")
+      .update(updateData)
+      .eq(
+        "project_step_id",
+        project_step_id
+      )
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Project step updated successfully.",
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Update Project Step Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Internal Server Error",
     });
   }
 };

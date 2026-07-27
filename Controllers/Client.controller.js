@@ -11,9 +11,6 @@ export const createClient = async (req, res) => {
     const {
       clientName,
       eventType,
-      eventDate,
-      eventEndDate,
-      selectedLocation,
       workflow_template_id,
       workflowSteps,
       teamAssignments,
@@ -22,8 +19,6 @@ export const createClient = async (req, res) => {
     if (
       !clientName ||
       !eventType ||
-      !eventDate ||
-      !selectedLocation ||
       !workflowSteps?.length
     ) {
       return res.status(400).json({
@@ -45,13 +40,6 @@ export const createClient = async (req, res) => {
           client_name: clientName,
 
           event_name: eventType,
-
-          event_date: eventDate,
-
-          event_end_date: eventEndDate,
-
-          event_location:
-            selectedLocation,
 
           email: `${clientName
             .trim()
@@ -254,19 +242,19 @@ const {
 
       discount_amount: 0,
 
-      travel_fee: travelFee,
+      travel_fee: 0,
 
-      final_amount: travelFee,
+      final_amount: 0,
 
       amount_paid: 0,
 
-      amount_due: travelFee,
+      amount_due: 0,
 
       payment_method: null,
 
-      issue_date: eventDate,
+      issue_date: new Date().toISOString().split("T")[0],
 
-      due_date: eventDate,
+      due_date: new Date().toISOString().split("T")[0],
 
       notes: null,
     },
@@ -444,6 +432,7 @@ export const getAllClients = async (req, res) => {
       clients = data;
     }
 
+    
     // =========================
     // ADMIN / SUPERADMIN
     // =========================
@@ -663,8 +652,6 @@ export const getAllClients = async (req, res) => {
               event_type:
                 client.event_name,
 
-              event_date:
-                client.event_date,
 
               current_step:
                 currentStep,
@@ -889,3 +876,53 @@ export const getClientAssets =
       });
     }
   };
+
+
+  export const createMember = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      name,
+      role,
+      email,
+      phone,
+      password
+    } = req.body;
+
+    const userId = req.user.user_id; // from your auth middleware
+
+
+    const { data, error } = await supabase
+      .from("members")
+      .insert({
+        user_id: userId,
+        full_name:name,
+        role,
+        email,
+        phone_number:phone,
+        password_hash:password,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Member created successfully.",
+      data,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};

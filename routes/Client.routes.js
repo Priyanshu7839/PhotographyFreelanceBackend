@@ -1,6 +1,6 @@
 import express from "express";
 
-import { createClient, getAllClients, getClientAssets, getTeamMembers, getWorkflowSteps, getWorkflowTemplates, updateClient } from "../Controllers/Client.controller.js";
+import { createClient, createMember, getAllClients, getClientAssets, getTeamMembers, getWorkflowSteps, getWorkflowTemplates, updateClient } from "../Controllers/Client.controller.js";
 
 import { adminOnly, userAuth } from "../middleware/auth.js";
 
@@ -51,4 +51,6 @@ clientRouter.put(
   updateClient
 );
 
+
+clientRouter.post("/addmembers", userAuth, createMember);
 export default clientRouter;
