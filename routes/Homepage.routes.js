@@ -1,6 +1,6 @@
 import express from "express";
 import { getHomepageFolderImages, getHomepageFolders, saveFile } from "../Controllers/Homepage.controller.js";
-import { userAuth } from "../middleware/auth.js";
+import { requireClientAccess, userAuth } from "../middleware/auth.js";
 const homepageRouter = express.Router();
 
 
@@ -15,7 +15,5 @@ homepageRouter.get(
 );
 
 
-homepageRouter.post(
-    '/saveclientassets',userAuth,saveFile
-)
+homepageRouter.post('/saveclientassets', userAuth, requireClientAccess(), saveFile)
 export default homepageRouter

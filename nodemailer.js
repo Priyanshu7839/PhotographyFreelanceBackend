@@ -20,6 +20,13 @@ transporter.on("error", (err) => {
   console.error("Nodemailer Error", err.message);
 });
 
+const escapeHtml = (value = "") => String(value)
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
+
 
 export async function SendEnquiry(req, res) {
   try {
@@ -32,11 +39,15 @@ export async function SendEnquiry(req, res) {
       email,
       phone,
       budget,
-      additionalDetails
+      additionalDetails,
+      packageName,
+      packageFeatures,
+      selectedAddOns,
+      quoteTotal
     } = req.body;
 
     // 🔴 Basic validation (don’t skip this in real apps)
-    if (!name || !email) {
+    if (!name || !email || !/^\S+@\S+\.\S+$/.test(email)) {
       return res.status(400).json({ message: "Name and Email are required" });
     }
 
@@ -45,39 +56,41 @@ export async function SendEnquiry(req, res) {
 
     // ✅ Email content
     const mailOptions = {
-      from: `"${name}" <${process.env.EMAIL_SENDER}>`,
-      to: "midorimediacompany@gmail.com", // your receiving email
-      subject: `📸 New Photography Enquiry from ${name}`,
+      from: `"Midori website" <${process.env.EMAIL_SENDER}>`,
+      to: process.env.ENQUIRY_RECIPIENT || "midorimediacompany@gmail.com",
+      replyTo: email,
+      subject: `New Package Enquiry from ${escapeHtml(name)}`,
       html: `
-        <h2>New Photography Enquiry</h2>
+        <h2>New Midori Package Enquiry</h2>
 
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Phone:</strong> ${phone || 'N/A'}</p>
+        <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+        <p><strong>Phone:</strong> ${escapeHtml(phone || 'N/A')}</p>
 
         <hr />
 
-        <p><strong>Project Type:</strong> ${projectType || 'N/A'}</p>
-        <p><strong>Project Scope:</strong> ${projectScope || 'N/A'}</p>
-        <p><strong>Timeline:</strong> ${timeline || 'N/A'}</p>
-        <p><strong>Budget:</strong> ${budget || 'N/A'}</p>
+        <p><strong>Project Type:</strong> ${escapeHtml(projectType || 'N/A')}</p>
+        <p><strong>Project Scope:</strong> ${escapeHtml(projectScope || 'N/A')}</p>
+        <p><strong>Timeline:</strong> ${escapeHtml(timeline || 'N/A')}</p>
+        <p><strong>Budget:</strong> ${escapeHtml(budget || 'N/A')}</p>
+        <p><strong>Selected Package:</strong> ${escapeHtml(packageName || 'N/A')}</p>
+        <p><strong>Package Includes:</strong> ${escapeHtml(packageFeatures || 'N/A')}</p>
+        <p><strong>Selected Add-ons:</strong> ${escapeHtml(selectedAddOns || 'None')}</p>
+        <p><strong>Quoted Total:</strong> ${escapeHtml(quoteTotal || budget || 'N/A')}</p>
 
         <hr />
 
         <p><strong>Vision:</strong></p>
-        <p>${vision || 'N/A'}</p>
+        <p>${escapeHtml(vision || 'N/A')}</p>
 
         <p><strong>Additional Details:</strong></p>
-        <p>${additionalDetails || 'N/A'}</p>
+        <p>${escapeHtml(additionalDetails || 'N/A')}</p>
       `,
     };
 
     // ✅ Send mail
-   transporter.sendMail(mailOptions)
-  .then(() => console.log("Mail sent"))
-  .catch(err => console.error("Mail error:", err));
-
-return res.status(200).json({ message: "Enquiry received" });
+    await transporter.sendMail(mailOptions);
+    return res.status(200).json({ success: true, message: "Enquiry received" });
 
    
 

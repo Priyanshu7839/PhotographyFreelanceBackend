@@ -3,25 +3,25 @@ const router = express.Router();
 
 import { getUploadUrl,saveFile,startMultipartUpload,getMultipartUploadUrl,completeMultipartUpload,abortMultipartUpload, CreateClient, GetClients, GetSize, getPreviewKey, GetClientImages, GetClientData, SelectImage, saveFileHomepage, GetHomepageImages } from "./upload.controller.js";
 import { SendEnquiry } from './nodemailer.js';
-import { userAuth } from './middleware/auth.js';
+import { adminOnly, requireClientAccess, userAuth } from './middleware/auth.js';
 
 
 
-router.post("/admin/upload-url", getUploadUrl);
-router.post("/savetoDb",saveFile)
-router.post("/savetoDbhomepage",userAuth,saveFileHomepage)
-router.post("/multipart/start", startMultipartUpload);
-router.post("/multipart/sign-part", getMultipartUploadUrl);
-router.post("/multipart/complete", completeMultipartUpload);
-router.post("/multipart/abort", abortMultipartUpload);
-router.post("/createClient",CreateClient)
-router.get("/clients",GetClients)
-router.post("/getsize",GetSize)
+router.post("/admin/upload-url", userAuth, adminOnly, getUploadUrl);
+router.post("/savetoDb", userAuth, requireClientAccess(), saveFile)
+router.post("/savetoDbhomepage",userAuth, adminOnly, saveFileHomepage)
+router.post("/multipart/start", userAuth, requireClientAccess(), startMultipartUpload);
+router.post("/multipart/sign-part", userAuth, getMultipartUploadUrl);
+router.post("/multipart/complete", userAuth, completeMultipartUpload);
+router.post("/multipart/abort", userAuth, abortMultipartUpload);
+router.post("/createClient", userAuth, adminOnly, CreateClient)
+router.get("/clients", userAuth, adminOnly, GetClients)
+router.post("/getsize", userAuth, requireClientAccess(), GetSize)
 
-router.post("/getpreviewurl",getPreviewKey)
-router.post("/getclientimages",GetClientImages)
-router.post("/getClientData",GetClientData)
-router.post("/selectImage",SelectImage)
+router.post("/getpreviewurl", userAuth, getPreviewKey)
+router.post("/getclientimages", userAuth, requireClientAccess(), GetClientImages)
+router.post("/getClientData", userAuth, requireClientAccess(), GetClientData)
+router.post("/selectImage", userAuth, SelectImage)
 router.get("/homepageimages",GetHomepageImages)
 
 router.post("/sendenquiry",SendEnquiry)

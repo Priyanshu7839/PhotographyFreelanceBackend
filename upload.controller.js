@@ -4,9 +4,28 @@ import { r2 } from "./r2client.js";
 import { supabase } from "./supabase.js";
 import jwt from "jsonwebtoken";
 
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const ALLOWED_UPLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "video/mp4", "application/pdf"]);
+const multipartSessions = new Map();
+
+function validateUpload({ fileName, fileType, fileSize }) {
+  if (!fileName || typeof fileName !== "string" || !/^[\w.() -]+$/.test(fileName)) return "A valid file name is required";
+  if (!ALLOWED_UPLOAD_TYPES.has(fileType)) return "This file type is not allowed";
+  if (fileSize !== undefined && (!Number.isFinite(Number(fileSize)) || Number(fileSize) < 1 || Number(fileSize) > MAX_UPLOAD_BYTES)) return "File size must be between 1 byte and 100 MB";
+  return null;
+}
+
+function sessionForRequest(req, uploadId, key) {
+  const session = multipartSessions.get(uploadId);
+  if (!session || session.key !== key || session.userId !== (req.user.member_id || req.user.client_id)) return null;
+  return session;
+}
+
 export const getUploadUrl = async (req, res) => {
   try {
-    const { fileName, fileType } = req.body;
+    const { fileName, fileType, fileSize } = req.body;
+    const validationError = validateUpload({ fileName, fileType, fileSize });
+    if (validationError) return res.status(400).json({ error: validationError });
 
     const key = `uploads/${Date.now()}-${fileName}`;
 
@@ -30,7 +49,9 @@ export const getUploadUrl = async (req, res) => {
 
 export const startMultipartUpload = async (req, res) => {
   try {
-    const { fileName, fileType } = req.body;
+    const { fileName, fileType, fileSize, clientId } = req.body;
+    const validationError = validateUpload({ fileName, fileType, fileSize });
+    if (validationError) return res.status(400).json({ error: validationError });
 
     const key = `uploads/${Date.now()}-${fileName}`;
 
@@ -41,6 +62,7 @@ export const startMultipartUpload = async (req, res) => {
     });
 
     const response = await r2.send(command);
+    multipartSessions.set(response.UploadId, { key, clientId: String(clientId), userId: req.user.member_id || req.user.client_id, expiresAt: Date.now() + 60 * 60 * 1000 });
 
     res.json({
       uploadId: response.UploadId,
@@ -56,6 +78,10 @@ export const startMultipartUpload = async (req, res) => {
 export const getMultipartUploadUrl = async (req, res) => {
   try {
     const { key, uploadId, partNumber } = req.body;
+    const session = sessionForRequest(req, uploadId, key);
+    if (!session || session.expiresAt < Date.now() || !Number.isInteger(Number(partNumber)) || Number(partNumber) < 1 || Number(partNumber) > 10000) {
+      return res.status(400).json({ error: "Invalid upload session" });
+    }
 
     const command = new UploadPartCommand({
       Bucket: process.env.R2_BUCKET,
@@ -80,6 +106,8 @@ export const getMultipartUploadUrl = async (req, res) => {
 export const completeMultipartUpload = async (req, res) => {
   try {
     const { key, uploadId, parts } = req.body;
+    const session = sessionForRequest(req, uploadId, key);
+    if (!session || session.expiresAt < Date.now() || !Array.isArray(parts) || !parts.length) return res.status(400).json({ error: "Invalid upload session" });
 
     const command = new CompleteMultipartUploadCommand({
       Bucket: process.env.R2_BUCKET,
@@ -91,6 +119,7 @@ export const completeMultipartUpload = async (req, res) => {
     });
 
     await r2.send(command);
+    multipartSessions.delete(uploadId);
 
     res.json({ success: true });
   } catch (err) {
@@ -104,6 +133,7 @@ export const completeMultipartUpload = async (req, res) => {
 export const abortMultipartUpload = async (req, res) => {
   try {
     const { key, uploadId } = req.body;
+    if (!sessionForRequest(req, uploadId, key)) return res.status(400).json({ error: "Invalid upload session" });
 
     const command = new AbortMultipartUploadCommand({
       Bucket: process.env.R2_BUCKET,
@@ -112,6 +142,7 @@ export const abortMultipartUpload = async (req, res) => {
     });
 
     await r2.send(command);
+    multipartSessions.delete(uploadId);
 
     res.json({ aborted: true });
   } catch (err) {
@@ -123,6 +154,9 @@ export const abortMultipartUpload = async (req, res) => {
 export const saveFile = async (req, res) => {
   try {
     const { key, name, size, mediaType, variantType, clientId } = req.body;
+    if (!key?.startsWith("uploads/") || !name || !Number.isFinite(Number(size)) || Number(size) < 1 || Number(size) > MAX_UPLOAD_BYTES) {
+      return res.status(400).json({ error: "Invalid file metadata" });
+    }
     
 
     const { data, error } = await supabase
@@ -347,7 +381,7 @@ export async function GetClientData(req,res){
     const { data, error } = await supabase
       .from("clients")
       .select("*")
-      .eq("id", clientId);
+      .eq("client_id", clientId);
 
     if (error) throw error;
 
@@ -361,23 +395,22 @@ export async function GetClientData(req,res){
 export async function SelectImage(req,res){
   const {imageId} = req.body
  try {
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from("files")
       .select("selected")
       .eq("pk_id", imageId)
       .single();
 
-      console.log(data)
+      if (fetchError || !data) return res.status(404).json({ error: "File not found" });
 
       const newValue = !data.selected;
 
-    await supabase
-  .from("users")
+    const { error: updateError } = await supabase
+  .from("files")
   .update({ selected: newValue })
   .eq("pk_id", imageId);
 
-
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     res.json({msg:'selected'});
   } catch (err) {

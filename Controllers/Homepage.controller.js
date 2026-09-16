@@ -211,7 +211,14 @@ export const getHomepageFolders =
 
   export const saveFile = async (req, res) => {
   try {
-    const { clientId,key, name, size, mediaType, variantType,vendorshared  } = req.body;
+    const { clientId, key, name, size, mediaType, variantType, vendorshared, vendor_id } = req.body;
+    const isVendorShared = vendorshared === true;
+    if (isVendorShared && !vendor_id) return res.status(400).json({ error: "Select a vendor before sharing files" });
+    if (isVendorShared) {
+      const { data: vendor, error: vendorError } = await supabase
+        .from("vendors").select("vendor_id").eq("vendor_id", vendor_id).eq("client_id", clientId).single();
+      if (vendorError || !vendor) return res.status(400).json({ error: "Selected vendor does not belong to this client" });
+    }
     
 const member_id = req.user.member_id
     const { data, error } = await supabase
@@ -226,7 +233,8 @@ const member_id = req.user.member_id
           file_type: mediaType,
           file_category: variantType,
           file_size:size,
-          is_vendor_shared: vendorshared,
+          is_vendor_shared: isVendorShared,
+          vendor_id: isVendorShared ? vendor_id : null,
         },
       ])
       .select();

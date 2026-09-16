@@ -1,4 +1,6 @@
 import { supabase } from "../supabase.js";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -14,6 +16,9 @@ export const createClient = async (req, res) => {
       workflow_template_id,
       workflowSteps,
       teamAssignments,
+      eventDate,
+      eventEndDate,
+      selectedLocation,
     } = req.body;
 
     if (
@@ -29,6 +34,8 @@ export const createClient = async (req, res) => {
 
 
     
+    const temporaryPassword = crypto.randomBytes(9).toString("base64url");
+
     // create client
     const {
       data: clientData,
@@ -53,7 +60,11 @@ export const createClient = async (req, res) => {
               -4
             )}@midori.com`,
 
-          password: "123456",
+          password: await bcrypt.hash(temporaryPassword, 12),
+
+          event_date: eventDate || null,
+          event_end_date: eventEndDate || null,
+          event_location: selectedLocation || null,
 
 
           workflow_template_id:
@@ -302,7 +313,12 @@ if (invoiceItemError) {
       success: true,
       message:
         "Client created successfully",
-      data: clientData,
+      data: {
+        ...clientData,
+        // This is the only creation response that contains the generated
+        // secret. It is never persisted or returned by client-read endpoints.
+        temporary_password: temporaryPassword,
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -815,6 +831,42 @@ export const getClientAssets =
       });
     }
   };
+
+export const resetClientPassword = async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { admin_password } = req.body;
+    if (!admin_password) return res.status(400).json({ success: false, message: "Your admin password is required" });
+
+    const { data: admin, error: adminError } = await supabase
+      .from("members")
+      .select("member_id, password_hash")
+      .eq("member_id", req.user.member_id)
+      .single();
+    if (adminError || !admin) return res.status(401).json({ success: false, message: "Unable to verify administrator" });
+
+    const valid = admin.password_hash?.startsWith("$2")
+      ? await bcrypt.compare(admin_password, admin.password_hash)
+      : admin_password === admin.password_hash;
+    if (!valid) return res.status(401).json({ success: false, message: "Incorrect admin password" });
+
+    const temporaryPassword = crypto.randomBytes(9).toString("base64url");
+    const { error } = await supabase
+      .from("clients")
+      .update({ password: await bcrypt.hash(temporaryPassword, 12) })
+      .eq("client_id", clientId);
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      message: "Client password reset. Copy it now; it cannot be shown again.",
+      temporary_password: temporaryPassword,
+    });
+  } catch (error) {
+    console.error("Reset Client Password Error:", error);
+    return res.status(500).json({ success: false, message: "Unable to reset client password" });
+  }
+};
 
   export const updateClient =
   async (req, res) => {

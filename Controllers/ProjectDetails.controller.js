@@ -13,7 +13,10 @@ const { data: client, error: clientError } =
     .select(`
       client_id,
       client_name,
-      event_name
+      event_name,
+      event_date,
+      event_location,
+      vendor_media_consent
     `)
     .eq("client_id", clientId)
     .single();
@@ -90,6 +93,7 @@ const { data: client, error: clientError } =
         event_name: client.event_name,
         event_date: client.event_date,
         event_location:client.event_location,
+        vendor_media_consent: client.vendor_media_consent,
 
         project_status: projectStatus,
 
@@ -134,9 +138,9 @@ export const updateWorkflowStatus = async (
     } = await supabase
       .from("project_steps")
       .select("*")
-      .eq("project_step_id", step_id).single()
-
-      console.log(currentStep)
+      .eq("project_step_id", step_id)
+      .eq("client_id", clientId)
+      .single();
       
       
 
@@ -148,6 +152,11 @@ export const updateWorkflowStatus = async (
         message:
           "No step assigned to this member",
       });
+    }
+
+    const isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
+    if (!isAdmin && !currentStep.assigned_member_ids?.map(String).includes(String(memberId))) {
+      return res.status(403).json({ success: false, message: "You are not assigned to this workflow step" });
     }
 
     // START TASK
@@ -378,8 +387,7 @@ export const getClientOverview = async (
       .from("clients")
       .select(`
         client_name,
-        email,
-        password
+        email
       `)
       .eq(
         "client_id",
@@ -652,12 +660,8 @@ export const getClientOverview = async (
         client_details: {
           client_name:
             client.client_name,
-
           email:
             client.email,
-
-          password:
-            client.password,
         },
 
         current_step:
@@ -1066,16 +1070,13 @@ export const addMoodboardDiscussion =
       const { clientId } =
         req.params;
 
-      const { client_notes } =
+      const { client_notes, moodboard_title } =
         req.body;
 
-      if (
-        !client_notes?.trim()
-      ) {
+      if (client_notes !== undefined && typeof client_notes !== "string") {
         return res.status(400).json({
           success: false,
-          message:
-            "Client notes are required",
+          message: "Client notes must be text",
         });
       }
 
@@ -1105,21 +1106,13 @@ export const addMoodboardDiscussion =
         });
       }
 
-      const existingNotes =
-        moodboard.client_notes || "";
-
-      const updatedNotes =
-        existingNotes.trim()
-          ? `${existingNotes}\n\n${client_notes.trim()}`
-          : client_notes.trim();
-
       const {
         error: updateError,
       } = await supabase
         .from("moodboards")
         .update({
-          client_notes:
-            updatedNotes,
+          ...(client_notes !== undefined ? { client_notes } : {}),
+          ...(moodboard_title !== undefined ? { moodboard_title: String(moodboard_title).trim() || null } : {}),
           updated_at:
             new Date().toISOString(),
         })
@@ -1213,7 +1206,7 @@ export const addMoodboardDiscussion =
       const { clientId } =
         req.params;
 
-      const { song_name } =
+      const { song_name, artist, notes } =
         req.body;
 
       if (!song_name?.trim()) {
@@ -1260,7 +1253,9 @@ export const addMoodboardDiscussion =
               moodboard.moodboard_id,
 
             song_name:
-              song_name.trim(),
+            song_name.trim(),
+            artist: artist?.trim() || null,
+            notes: notes?.trim() || null,
           },
         ]);
 
@@ -1360,9 +1355,12 @@ export const addMoodboardDiscussion =
   export const deleteMoodboardSong =
   async (req, res) => {
     try {
-      const { songId } =
+      const { songId, clientId } =
         req.params;
 
+      const { data: moodboard, error: moodboardError } = await supabase
+        .from("moodboards").select("moodboard_id").eq("client_id", clientId).single();
+      if (moodboardError || !moodboard) return res.status(404).json({ success: false, message: "Moodboard not found" });
       const {
         error: deleteError,
       } = await supabase
@@ -1373,7 +1371,8 @@ export const addMoodboardDiscussion =
         .eq(
           "moodboard_song_id",
           songId
-        );
+        )
+        .eq("moodboard_id", moodboard.moodboard_id);
 
       if (deleteError) {
         throw deleteError;
@@ -1691,8 +1690,12 @@ export const getProductionSetup =
         });
       }
 
-      const memberId =
-        req.user.member_id;
+      const requestedMemberId = req.body.member_id;
+      const memberId = requestedMemberId || req.user.member_id;
+      const isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
+      if (requestedMemberId && String(requestedMemberId) !== String(req.user.member_id) && !isAdmin) {
+        return res.status(403).json({ success: false, message: "Only admins can edit another member's gear" });
+      }
 
       // Ensure member is assigned to at least one workflow step
       const {
@@ -2312,19 +2315,14 @@ export const getProductionSetup =
         data: steps,
         error: stepsError,
       } = await supabase
-        .from("project_steps")
+      .from("project_steps")
         .select(`
-          assigned_member_id,
+          assigned_member_ids,
           step_name
         `)
         .eq(
           "client_id",
           clientId
-        )
-        .not(
-          "assigned_member_id",
-          "is",
-          null
         );
 
       if (stepsError) {
@@ -2333,10 +2331,7 @@ export const getProductionSetup =
 
       const memberIds = [
         ...new Set(
-          steps.map(
-            (step) =>
-              step.assigned_member_id
-          )
+          steps.flatMap((step) => step.assigned_member_ids || [])
         ),
       ];
 
@@ -2369,26 +2364,10 @@ export const getProductionSetup =
           memberData;
       }
 
-      const teamMembers =
-        steps.map(
-          (step) => {
-            const member =
-              members.find(
-                (m) =>
-                  m.member_id ===
-                  step.assigned_member_id
-              );
-
-            return {
-              member_name:
-                member?.full_name ||
-                "Unknown",
-
-              step_name:
-                step.step_name,
-            };
-          }
-        );
+      const teamMembers = steps.flatMap((step) => (step.assigned_member_ids || []).map((memberId) => ({
+        member_name: members.find((member) => String(member.member_id) === String(memberId))?.full_name || "Unknown",
+        step_name: step.step_name,
+      })));
 
       return res.status(200).json({
         success: true,
@@ -2746,6 +2725,10 @@ export const addProjectStep = async (req, res) => {
       const { sign_name } =
         req.body;
 
+      if (req.user?.user_type !== "client" || String(req.user.client_id) !== String(clientId)) {
+        return res.status(403).json({ success: false, message: "Only the contract client can sign this contract" });
+      }
+
       if (
         !sign_name?.trim()
       ) {
@@ -2900,81 +2883,6 @@ export const getClientLicenses =
       });
     }
   };
-
-  export const downloadClientLicense =
-  async (req, res) => {
-    try {
-      const { fileId } =
-        req.params;
-
-      const {
-        data: file,
-        error,
-      } = await supabase
-        .from("files")
-        .select(`
-          file_name,
-          object_storage_key
-        `)
-        .eq(
-          "file_id",
-          fileId
-        )
-        .single();
-
-      if (
-        error ||
-        !file
-      ) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "File not found",
-        });
-      }
-
-      const command =
-        new GetObjectCommand({
-          Bucket:
-            process.env
-              .R2_BUCKET_NAME,
-
-          Key: file.object_storage_key,
-
-          ResponseContentDisposition: `attachment; filename="${file.file_name}"`,
-        });
-
-      const downloadUrl =
-        await getSignedUrl(
-          r2,
-          command,
-          {
-            expiresIn: 300,
-          }
-        );
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          download_url:
-            downloadUrl,
-        },
-      });
-    } catch (error) {
-      console.error(
-        "Download License Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        message:
-          error?.message ||
-          "Internal Server Error",
-      });
-    }
-  };
-
 
   export const getClientInvoice = async (req, res) => {
   try {
@@ -3624,14 +3532,20 @@ export const getProjectStepsForTravel =
           0
         );
 
-      const billableMiles = Math.max(
-        totalMiles - FREE_MILES,
+      const billableMiles = projectSteps.reduce(
+        (sum, step) => sum + Math.max(Number(step.travel_distance || 0) - FREE_MILES, 0),
         0
       );
 
       const travelFee =
         billableMiles *
         RATE_PER_MILE;
+
+      const { error: updateClientError } = await supabase
+        .from("clients")
+        .update({ driving_distance: totalMiles, travel_fee: travelFee })
+        .eq("client_id", clientId);
+      if (updateClientError) throw updateClientError;
 
       // -----------------------------
       // Update Invoice
@@ -3763,8 +3677,17 @@ export const getProjectStepsForTravel =
       updateData.venue = venue;
 
     if (scheduled_time !== undefined)
-      updateData.scheduled_time =
-        scheduled_time;
+      {
+        updateData.scheduled_time = scheduled_time || null;
+        // Keep legacy create/read consumers compatible during the database migration.
+        if (scheduled_time) {
+          const date = new Date(scheduled_time);
+          if (!Number.isNaN(date.getTime())) {
+            updateData.step_date = date.toISOString().slice(0, 10);
+            updateData.step_time = date.toISOString().slice(11, 16);
+          }
+        }
+      }
 
     const { data, error } = await supabase
       .from("project_steps")

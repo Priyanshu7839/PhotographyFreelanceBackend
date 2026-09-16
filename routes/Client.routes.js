@@ -1,8 +1,8 @@
 import express from "express";
 
-import { createClient, createMember, getAllClients, getClientAssets, getTeamMembers, getWorkflowSteps, getWorkflowTemplates, updateClient } from "../Controllers/Client.controller.js";
+import { createClient, createMember, getAllClients, getClientAssets, getTeamMembers, getWorkflowSteps, getWorkflowTemplates, resetClientPassword, updateClient } from "../Controllers/Client.controller.js";
 
-import { adminOnly, userAuth } from "../middleware/auth.js";
+import { adminOnly, requireClientAccess, userAuth } from "../middleware/auth.js";
 
 const clientRouter = express.Router();
 
@@ -41,6 +41,7 @@ clientRouter.get(
 clientRouter.get(
   "/:clientId/assets",
   userAuth,
+  requireClientAccess(),
   getClientAssets
 );
 
@@ -50,6 +51,8 @@ clientRouter.put(
   adminOnly,
   updateClient
 );
+
+clientRouter.post("/:clientId/reset-password", userAuth, adminOnly, resetClientPassword);
 
 
 clientRouter.post("/addmembers", userAuth, createMember);
