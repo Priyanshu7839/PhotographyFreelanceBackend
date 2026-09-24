@@ -3416,10 +3416,8 @@ export const getProjectStepsForTravel =
       const { clientId } =
         req.params;
 
-      const {
-        data: projectSteps,
-        error,
-      } = await supabase
+      const [{ data: projectSteps, error }, { data: client, error: clientError }] = await Promise.all([
+        supabase
         .from("project_steps")
         .select(`
           project_step_id,
@@ -3433,15 +3431,25 @@ export const getProjectStepsForTravel =
         )
         .order("step_order", {
           ascending: true,
-        });
+        }),
+        supabase
+          .from("clients")
+          .select("travel_free_allowance, travel_rate_per_mile")
+          .eq("client_id", clientId)
+          .single(),
+      ]);
 
-      if (error) {
-        throw error;
+      if (error || clientError) {
+        throw error || clientError;
       }
 
       return res.status(200).json({
         success: true,
         data: projectSteps,
+        travel_config: {
+          freeAllowanceMiles: Number(client?.travel_free_allowance ?? 20),
+          ratePerMile: Number(client?.travel_rate_per_mile ?? 0.7),
+        },
       });
     } catch (error) {
       console.error(
@@ -3459,6 +3467,75 @@ export const getProjectStepsForTravel =
   };
 
 
+export const updateTravelConfig = async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const freeAllowance = Number(req.body.free_allowance_miles);
+    const ratePerMile = Number(req.body.rate_per_mile);
+
+    if (!Number.isFinite(freeAllowance) || freeAllowance < 0 || freeAllowance > 100000) {
+      return res.status(400).json({ success: false, message: "Free allowance must be a valid non-negative number" });
+    }
+    if (!Number.isFinite(ratePerMile) || ratePerMile < 0 || ratePerMile > 10000) {
+      return res.status(400).json({ success: false, message: "Rate per mile must be a valid non-negative number" });
+    }
+
+    const { data, error } = await supabase
+      .from("clients")
+      .update({
+        travel_free_allowance: freeAllowance,
+        travel_rate_per_mile: Number(ratePerMile.toFixed(2)),
+      })
+      .eq("client_id", clientId)
+      .select("travel_free_allowance, travel_rate_per_mile")
+      .single();
+    if (error) throw error;
+
+    const { data: steps, error: stepsError } = await supabase
+      .from("project_steps")
+      .select("travel_distance")
+      .eq("client_id", clientId);
+    if (stepsError) throw stepsError;
+
+    const totalMiles = (steps || []).reduce((sum, step) => sum + (Number(step.travel_distance) || 0), 0);
+    const billableMiles = (steps || []).reduce(
+      (sum, step) => sum + Math.max((Number(step.travel_distance) || 0) - Number(data.travel_free_allowance), 0),
+      0
+    );
+    const travelFee = Number((billableMiles * Number(data.travel_rate_per_mile)).toFixed(2));
+    const { error: totalsError } = await supabase
+      .from("clients")
+      .update({ driving_distance: totalMiles, travel_fee: travelFee })
+      .eq("client_id", clientId);
+    if (totalsError) throw totalsError;
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("invoice_id, subtotal_amount, tax_amount, discount_amount, amount_paid")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (invoiceError) throw invoiceError;
+    if (invoice) {
+      const finalAmount = (Number(invoice.subtotal_amount) || 0) + (Number(invoice.tax_amount) || 0) + travelFee - (Number(invoice.discount_amount) || 0);
+      const { error: invoiceUpdateError } = await supabase
+        .from("invoices")
+        .update({ travel_fee: travelFee, final_amount: finalAmount, amount_due: finalAmount - (Number(invoice.amount_paid) || 0) })
+        .eq("invoice_id", invoice.invoice_id);
+      if (invoiceUpdateError) throw invoiceUpdateError;
+    }
+
+    return res.json({
+      success: true,
+      message: "Travel pricing settings updated",
+      data: { freeAllowanceMiles: Number(data.travel_free_allowance), ratePerMile: Number(data.travel_rate_per_mile), totalMiles, billableMiles, travelFee, invoice_updated: Boolean(invoice) },
+    });
+  } catch (error) {
+    console.error("Update Travel Config Error:", error);
+    return res.status(500).json({ success: false, message: "Unable to update travel pricing settings" });
+  }
+};
+
+
 
   export const updateProjectStepTravel =
   async (req, res) => {
@@ -3471,12 +3548,27 @@ export const getProjectStepsForTravel =
         travel_distance,
       } = req.body;
 
+      const normalizedVenue = typeof venue === "string" ? venue.trim() : "";
+      const normalizedDistance = Number(travel_distance);
+      if (!normalizedVenue || normalizedVenue.length > 250) {
+        return res.status(400).json({ success: false, message: "Venue is required and must be 250 characters or fewer" });
+      }
+      if (!Number.isFinite(normalizedDistance) || normalizedDistance < 0 || normalizedDistance > 100000) {
+        return res.status(400).json({ success: false, message: "Travel distance must be a valid non-negative number" });
+      }
+
       // -----------------------------
       // CONFIG
       // -----------------------------
 
-      const FREE_MILES = 20;
-      const RATE_PER_MILE = 0.70;
+      const { data: clientConfig, error: clientConfigError } = await supabase
+        .from("clients")
+        .select("travel_free_allowance, travel_rate_per_mile")
+        .eq("client_id", clientId)
+        .single();
+      if (clientConfigError) throw clientConfigError;
+      const FREE_MILES = Number(clientConfig?.travel_free_allowance ?? 20);
+      const RATE_PER_MILE = Number(clientConfig?.travel_rate_per_mile ?? 0.7);
 
       // -----------------------------
       // Update project step
@@ -3487,8 +3579,8 @@ export const getProjectStepsForTravel =
       } = await supabase
         .from("project_steps")
         .update({
-          venue,
-          travel_distance,
+          venue: normalizedVenue,
+          travel_distance: normalizedDistance,
         })
         .eq(
           "project_step_id",
@@ -3537,9 +3629,7 @@ export const getProjectStepsForTravel =
         0
       );
 
-      const travelFee =
-        billableMiles *
-        RATE_PER_MILE;
+      const travelFee = Number((billableMiles * RATE_PER_MILE).toFixed(2));
 
       const { error: updateClientError } = await supabase
         .from("clients")
@@ -3567,10 +3657,20 @@ export const getProjectStepsForTravel =
           "client_id",
           clientId
         )
-        .single();
+        .maybeSingle();
 
       if (invoiceError) {
         throw invoiceError;
+      }
+
+      // A project can be planned before an invoice exists. The travel step and
+      // client totals are still valid; invoice values are synchronized later.
+      if (!invoice) {
+        return res.status(200).json({
+          success: true,
+          message: "Travel information updated. No invoice exists yet.",
+          data: { total_miles: totalMiles, billable_miles: billableMiles, travel_fee: travelFee, invoice_updated: false },
+        });
       }
 
       const subtotal =
@@ -3634,6 +3734,7 @@ export const getProjectStepsForTravel =
             billableMiles,
           travel_fee:
             travelFee,
+          invoice_updated: true,
         },
       });
     } catch (error) {

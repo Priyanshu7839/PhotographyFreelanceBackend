@@ -4,6 +4,8 @@
 alter table public.clients add column if not exists event_date date;
 alter table public.clients add column if not exists event_end_date date;
 alter table public.clients add column if not exists event_location text;
+alter table public.clients add column if not exists travel_free_allowance numeric not null default 20;
+alter table public.clients add column if not exists travel_rate_per_mile numeric not null default 0.70;
 
 alter table public.project_steps add column if not exists scheduled_time timestamptz;
 alter table public.moodboard_songs add column if not exists artist text;

@@ -1,7 +1,7 @@
 import express from "express";
 
 import { adminOnly, clientOnly, requireClientAccess, requireFileAccess, requireProjectStepAccess, teamOnly, userAuth } from "../middleware/auth.js";
-import { addInvoiceItem, addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteInvoiceItem, deleteMoodboardSong, downloadFile, getAllGears, getClientHeader, getClientInvoice, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getProjectStepsForTravel, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateInvoiceItem, updateProjectStep, updateProjectStepTravel, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
+import { addInvoiceItem, addMoodboardDiscussion, addMoodboardSong, addProjectStep, addTravelDiscussion, assignGears, deleteInvoiceItem, deleteMoodboardSong, downloadFile, getAllGears, getClientHeader, getClientInvoice, getClientLicenses, getClientNotes, getClientOverview, getClientWorkflow, getContractStatus, getMoodboardAssets, getMoodboardDiscussions, getMoodboardSongs, getProductionOverview, getProductionSetup, getProjectStepsForTravel, getTravelData, getTravelDiscussions, signContract, updateClientNotes, updateInvoiceItem, updateProjectStep, updateProjectStepTravel, updateTravelConfig, updateWorkflowStatus } from "../Controllers/ProjectDetails.controller.js";
 
 const projectRouter = express.Router();
 projectRouter.get(
@@ -202,11 +202,19 @@ projectRouter.get(
   getProjectStepsForTravel
 );
 
+projectRouter.put(
+  "/travel/:clientId/config",
+  userAuth,
+  requireClientAccess(),
+  teamOnly,
+  updateTravelConfig
+);
 
 projectRouter.put(
   "/travel/:clientId/:projectStepId",
   userAuth,
   requireClientAccess(),
+  teamOnly,
   updateProjectStepTravel
 );
 
