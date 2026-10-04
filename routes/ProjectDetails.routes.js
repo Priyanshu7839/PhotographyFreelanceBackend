@@ -187,7 +187,7 @@ projectRouter.get(
 projectRouter.post(
   "/:clientId/invoices/items",
   userAuth,
-  requireClientAccess(),
+  adminOnly,
   addInvoiceItem
 );
 

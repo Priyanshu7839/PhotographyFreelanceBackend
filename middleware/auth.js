@@ -9,7 +9,7 @@ const cookieOptions = {
   sameSite: isProduction ? "none" : "lax",
 };
 
-const publicUserFields = "member_id, full_name, email, role";
+const publicUserFields = "member_id, full_name, email, role, is_active";
 const publicClientFields = "client_id, client_name, email, event_name, event_date, event_location";
 
 export const userAuth = async (
@@ -62,6 +62,9 @@ export const userAuth = async (
         });
       }
 
+      if (data.is_active === false) {
+        return res.status(401).json({ success: false, message: "Account is deactivated" });
+      }
       user = {
         ...data,
         user_type: "member",
@@ -249,11 +252,11 @@ export const login = async (req, res) => {
     // find user
     const { data: user, error } = await supabase
       .from("members")
-      .select("member_id, full_name, email, role, password_hash")
-      .eq("email", email)
+      .select("member_id, full_name, email, role, password_hash, is_active")
+      .ilike("email", String(email).trim().replace(/[\\%_]/g, "\\$&"))
       .single();
 
-    if (error || !user) {
+    if (error || !user || user.is_active === false) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
@@ -336,7 +339,7 @@ export const clientLogin =
       } = await supabase
         .from("clients")
         .select("client_id, client_name, email, password")
-        .eq("email", email)
+        .ilike("email", String(email).trim().replace(/[\\%_]/g, "\\$&"))
         .single();
 
       if (error || !client) {

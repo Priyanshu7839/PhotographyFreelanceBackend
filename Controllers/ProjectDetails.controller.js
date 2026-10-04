@@ -2965,6 +2965,12 @@ export const addInvoiceItem = async (req, res) => {
         message: "item_name, quantity and rate are required",
       });
     }
+    if (!Number.isInteger(Number(quantity)) || Number(quantity) < 1) {
+      return res.status(400).json({ success: false, message: "Quantity must be a whole number of 1 or more" });
+    }
+    if (!Number.isFinite(Number(rate)) || Number(rate) < 0) {
+      return res.status(400).json({ success: false, message: "Rate must be 0 or more" });
+    }
 
     // ----------------------------------------------------
     // GET CLIENT INVOICE

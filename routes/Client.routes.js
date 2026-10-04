@@ -55,5 +55,5 @@ clientRouter.put(
 clientRouter.post("/:clientId/reset-password", userAuth, adminOnly, resetClientPassword);
 
 
-clientRouter.post("/addmembers", userAuth, createMember);
+clientRouter.post("/addmembers", userAuth, adminOnly, createMember);
 export default clientRouter;

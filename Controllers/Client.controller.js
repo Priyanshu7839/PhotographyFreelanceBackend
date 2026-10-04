@@ -851,11 +851,13 @@ export const resetClientPassword = async (req, res) => {
     if (!valid) return res.status(401).json({ success: false, message: "Incorrect admin password" });
 
     const temporaryPassword = crypto.randomBytes(9).toString("base64url");
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("clients")
       .update({ password: await bcrypt.hash(temporaryPassword, 12) })
-      .eq("client_id", clientId);
+      .eq("client_id", clientId)
+      .select("client_id");
     if (error) throw error;
+    if (!updated?.length) return res.status(404).json({ success: false, message: "Client not found" });
 
     return res.status(200).json({
       success: true,
@@ -930,51 +932,49 @@ export const resetClientPassword = async (req, res) => {
   };
 
 
-  export const createMember = async (
-  req,
-  res
-) => {
+  export const createMember = async (req, res) => {
   try {
-    const {
-      name,
-      role,
-      email,
-      phone,
-      password
-    } = req.body;
-
-    const userId = req.user.user_id; // from your auth middleware
-
+    const { name, role, email, phone, password } = req.body;
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    if (!name || !cleanEmail || !password) {
+      return res.status(400).json({ success: false, message: "Name, email and password are required." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      return res.status(400).json({ success: false, message: "Enter a valid email address." });
+    }
+    if (String(password).length < 10) {
+      return res.status(400).json({ success: false, message: "Password must be at least 10 characters." });
+    }
+    // Admins can add team members and admins; only a superadmin can add a superadmin.
+    const allowedRoles = req.user.role === "superadmin" ? ["team", "admin", "superadmin"] : ["team", "admin"];
+    const memberRole = role || "team";
+    if (!allowedRoles.includes(memberRole)) {
+      return res.status(403).json({ success: false, message: "You cannot create a member with that role." });
+    }
 
     const { data, error } = await supabase
       .from("members")
       .insert({
-        user_id: userId,
-        full_name:name,
-        role,
-        email,
-        phone_number:phone,
-        password_hash:password,
+        full_name: String(name).trim(),
+        role: memberRole,
+        email: cleanEmail,
+        phone_number: phone || null,
+        password_hash: await bcrypt.hash(String(password), 12),
       })
-      .select()
+      .select("member_id, full_name, email, role, phone_number")
       .single();
 
     if (error) {
-      return res.status(500).json({
+      const duplicate = error.code === "23505";
+      return res.status(duplicate ? 409 : 500).json({
         success: false,
-        message: error.message,
+        message: duplicate ? "A member with this email already exists." : "Could not create member.",
       });
     }
 
-    return res.status(201).json({
-      success: true,
-      message: "Member created successfully.",
-      data,
-    });
+    return res.status(201).json({ success: true, message: "Member created successfully.", data });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: err.message,
-    });
+    console.error("Create member error:", err);
+    return res.status(500).json({ success: false, message: "Could not create member." });
   }
 };
