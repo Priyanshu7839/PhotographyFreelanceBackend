@@ -30,6 +30,7 @@ const allowedOrigins = (process.env.CORS_ORIGINS || [
   "http://localhost:5174",
   "http://localhost:3000",
   "https://photographyfreelance.vercel.app",
+  "https://midori-website.vercel.app",
   "https://midorimediacompany.com",
   "https://www.midorimediacompany.com",
 ].join(","))
