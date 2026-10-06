@@ -4,7 +4,8 @@ import 'dotenv/config';
 
 const port = Number(process.env.SMTP_PORT || 465);
 const auth = {
-  user: process.env.EMAIL_SENDER,
+  // SMTP_USER is the mailbox that logs in, when EMAIL_SENDER (the "From" address) is an alias of it
+  user: process.env.SMTP_USER || process.env.EMAIL_SENDER,
   pass: process.env.PASSWORD_SENDER,
 };
 
