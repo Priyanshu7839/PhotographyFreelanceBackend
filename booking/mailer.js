@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { formatUSD } from "./pricing.js";
+import { smtpConfig } from "../mailConfig.js";
 
 let transporter;
 function getTransporter() {
@@ -8,10 +9,7 @@ function getTransporter() {
     // Used by automated tests: builds the message but sends nothing.
     transporter = nodemailer.createTransport({ jsonTransport: true });
   } else {
-    transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: process.env.EMAIL_SENDER, pass: process.env.PASSWORD_SENDER },
-    });
+    transporter = nodemailer.createTransport(smtpConfig);
   }
   return transporter;
 }
