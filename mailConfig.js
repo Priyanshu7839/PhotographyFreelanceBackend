@@ -3,13 +3,12 @@
 import 'dotenv/config';
 
 const port = Number(process.env.SMTP_PORT || 465);
-
-export const smtpConfig = {
-  host: process.env.SMTP_HOST || "smtp.zoho.com",
-  port,
-  secure: port === 465,
-  auth: {
-    user: process.env.EMAIL_SENDER,
-    pass: process.env.PASSWORD_SENDER,
-  },
+const auth = {
+  user: process.env.EMAIL_SENDER,
+  pass: process.env.PASSWORD_SENDER,
 };
+
+// A Gmail sender keeps working through Gmail until EMAIL_SENDER is switched to the Zoho address.
+export const smtpConfig = /@gmail\.com$/i.test(process.env.EMAIL_SENDER || "") && !process.env.SMTP_HOST
+  ? { service: "gmail", auth }
+  : { host: process.env.SMTP_HOST || "smtp.zoho.com", port, secure: port === 465, auth };
